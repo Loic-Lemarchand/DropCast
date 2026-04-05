@@ -1,0 +1,44 @@
+# Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# NuGet
+packages/
+*.nupkg
+nuget.exe
+
+# External source repos
+Discord.Net/
+
+# Secret token
+token.txt
+
+# Build artifacts
+*.dll
+*.exe
+*.pdb
+!logo.ico
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Rider / ReSharper
+_ReSharper*/
+*.DotSettings.user
+.idea/
