@@ -18,16 +18,20 @@ namespace DropCast
     {
         private static string ConfigFilePath = "config.txt";
         private static ServiceProvider _services;
-        private static ulong _channelId = LoadChannelId();
+        private static ulong _channelId;
         private static Form1 _desktopWindow;
         private static EventManager _eventManager;
-        private static string BotToken = LoadBotToken();
+        private static string BotToken;
 
         [STAThread]
         static void Main()
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+
+            _channelId = LoadChannelId();
+            BotToken = LoadBotToken();
+
             Form1 desktopWindow = new Form1();
 
             var config = new NLog.Config.LoggingConfiguration();

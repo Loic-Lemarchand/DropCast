@@ -36,10 +36,6 @@ namespace DropCast
             _client.Log += LogDiscord;
             _client.Ready += OnReady;
             _client.MessageReceived += ReceiveMessage;
-            _client.LoginAsync(TokenType.Bot, options.Value.BotToken);
-            _client.StartAsync();
-
-
         }
 
         public SocketTextChannel GetSocketTextChannel(ulong channelId) => _client.GetChannel(channelId) as SocketTextChannel;
