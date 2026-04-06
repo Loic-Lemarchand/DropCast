@@ -12,7 +12,7 @@ using Discord;
 using System.IO;
 using System.Text;
 
-namespace LiveChatDesktop
+namespace DropCast
 {
     internal static class Program
     {

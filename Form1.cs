@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using LibVLCSharp.Shared;
 
-namespace LiveChatDesktop
+namespace DropCast
 {
     public partial class Form1 : Form
     {

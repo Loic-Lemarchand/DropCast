@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace LiveChatDesktop.Properties
+namespace DropCast.Properties
 {
 
 

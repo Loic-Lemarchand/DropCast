@@ -1,4 +1,4 @@
-﻿namespace LiveChatDesktop
+﻿namespace DropCast
 {
     partial class Form1
     {
@@ -17,7 +17,7 @@
         private void InitializeComponent()
         {
             this.pictureBox = new System.Windows.Forms.PictureBox();
-            this.Caption = new LiveChatDesktop.CustomLabel();
+            this.Caption = new DropCast.CustomLabel();
             this.videoView = new LibVLCSharp.WinForms.VideoView();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.videoView)).BeginInit();
@@ -59,7 +59,7 @@
             this.Controls.Add(this.videoView);
             this.Controls.Add(this.pictureBox);
             this.Name = "Form1";
-            this.Text = "LiveChatDesktop";
+            this.Text = "DropCast";
             this.Load += new System.EventHandler(this.Form1_Load);
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.videoView)).EndInit();
@@ -67,7 +67,7 @@
         }
 
         private System.Windows.Forms.PictureBox pictureBox;
-        private LiveChatDesktop.CustomLabel Caption;
+        private DropCast.CustomLabel Caption;
         private LibVLCSharp.WinForms.VideoView videoView;
     }
 }

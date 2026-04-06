@@ -17,7 +17,7 @@ public class DiscordServiceOptions
     public string BotToken { get; set; }
 }
 
-namespace LiveChatDesktop
+namespace DropCast
 {
     public class EventManager : IDiscordService
     {

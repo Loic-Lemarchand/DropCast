@@ -7,7 +7,7 @@ using Label = System.Windows.Forms.Label;
 using System;
 using System.Drawing.Text;
 
-namespace LiveChatDesktop
+namespace DropCast
 {
 
     public class CustomLabel : Label
