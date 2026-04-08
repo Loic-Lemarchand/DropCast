@@ -11,7 +11,7 @@ namespace DropCast.Abstractions
         event EventHandler DisplayCompleted;
         void ShowText(string message);
         void ShowImage(string imageUrl, string caption);
-        void ShowVideo(string videoUrl, string caption, double? trimStartSeconds, double? trimEndSeconds);
+        void ShowVideo(string videoUrl, string caption, double? trimStartSeconds, double? trimEndSeconds, string referrer = null, string userAgent = null);
         void PlayAudio(string audioUrl, string caption);
     }
 }

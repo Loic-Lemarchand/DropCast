@@ -136,9 +136,9 @@ namespace DropCast
         }
 
         // IMediaDisplay.ShowVideo
-        void IMediaDisplay.ShowVideo(string videoUrl, string caption, double? trimStartSeconds, double? trimEndSeconds)
+        void IMediaDisplay.ShowVideo(string videoUrl, string caption, double? trimStartSeconds, double? trimEndSeconds, string referrer, string userAgent)
         {
-            DisplayVideo(videoUrl, caption, trimStartSeconds, trimEndSeconds);
+            DisplayVideo(videoUrl, caption, trimStartSeconds, trimEndSeconds, referrer, userAgent);
         }
 
         // IMediaDisplay.PlayAudio
@@ -147,11 +147,11 @@ namespace DropCast
             PlayAudio(audioUrl, caption);
         }
 
-        public void DisplayVideo(string videoUrl, string captionText, double? trimStart = null, double? trimEnd = null)
+        public void DisplayVideo(string videoUrl, string captionText, double? trimStart = null, double? trimEnd = null, string referrer = null, string userAgent = null)
         {
             if (InvokeRequired)
             {
-                Invoke(new Action<string, string, double?, double?>(DisplayVideo), videoUrl, captionText, trimStart, trimEnd);
+                Invoke(new Action<string, string, double?, double?, string, string>(DisplayVideo), videoUrl, captionText, trimStart, trimEnd, referrer, userAgent);
                 return;
             }
 
@@ -234,6 +234,11 @@ namespace DropCast
                     media.AddOption(":network-caching=100");
                     media.AddOption(":file-caching=100");
                     media.AddOption(":live-caching=100");
+
+                    if (!string.IsNullOrEmpty(referrer))
+                        media.AddOption(string.Format(":http-referrer={0}", referrer));
+                    if (!string.IsNullOrEmpty(userAgent))
+                        media.AddOption(string.Format(":http-user-agent={0}", userAgent));
                 }
 
                 if (trimStart.HasValue && trimStart.Value > 0)

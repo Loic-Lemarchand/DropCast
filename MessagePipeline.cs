@@ -197,7 +197,7 @@ namespace DropCast
                             urlCaption = resolved.Title ?? "";
 
                         _logger.LogInformation("▶️ Playing resolved video: {Title}", resolved.Title);
-                        _display.ShowVideo(resolved.DirectUrl, urlCaption, trimStart, trimEnd);
+                        _display.ShowVideo(resolved.DirectUrl, urlCaption, trimStart, trimEnd, resolved.Referrer, resolved.UserAgent);
                         return true;
                     }
                 }

@@ -303,7 +303,8 @@ namespace DropCast.Services
         }
 
         /// <summary>
-        /// Résout une URL via yt-dlp --dump-json. Retourne le flux direct ou fallback OpenGraph/VLC.
+        /// Résout une URL via yt-dlp. TikTok → téléchargement local (CDN nécessite cookies).
+        /// Instagram et autres → --dump-json pour URL directe.
         /// </summary>
         private async Task<ResolvedMedia> ResolveViaYtDlpAsync(string url)
         {
@@ -321,76 +322,155 @@ namespace DropCast.Services
 
             try
             {
-                var psi = new ProcessStartInfo
-                {
-                    FileName = _ytdlpPath,
-                    Arguments = $"--no-playlist --dump-json -f \"best[ext=mp4]/best\" \"{url}\"",
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
-                };
+                // TikTok CDN nécessite des headers que VLC ne supporte pas → téléchargement local 480p
+                if (IsTikTokUrl(url))
+                    return await DownloadViaYtDlpAsync(url);
 
-                var process = Process.Start(psi);
-                var stdoutTask = process.StandardOutput.ReadToEndAsync();
-                var stderrTask = process.StandardError.ReadToEndAsync();
-
-                var exited = await Task.Run(() => process.WaitForExit(30000));
-                if (!exited)
-                {
-                    try { process.Kill(); } catch { }
-                    _logger.LogWarning("yt-dlp timed out for: {Url}", url);
-                    return await ResolveViaOpenGraphAsync(url);
-                }
-
-                var stdout = await stdoutTask;
-                var stderr = await stderrTask;
-
-                if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(stdout))
-                {
-                    _logger.LogWarning("yt-dlp failed (exit={Code}): {Err}", process.ExitCode, stderr);
-                    return await ResolveViaOpenGraphAsync(url);
-                }
-
-                var json = JObject.Parse(stdout);
-                var directUrl = (string)json["url"];
-
-                // Si url est null, chercher dans formats
-                if (string.IsNullOrEmpty(directUrl))
-                {
-                    var formats = json["formats"] as JArray;
-                    if (formats != null && formats.Count > 0)
-                    {
-                        // Prendre le dernier format (meilleure qualité)
-                        directUrl = (string)formats[formats.Count - 1]["url"];
-                    }
-                }
-
-                if (string.IsNullOrEmpty(directUrl))
-                {
-                    _logger.LogWarning("yt-dlp returned no URL for: {Url}", url);
-                    return await ResolveViaOpenGraphAsync(url);
-                }
-
-                var title = (string)json["title"] ?? "";
-                var durationSec = (double?)json["duration"];
-                TimeSpan? duration = durationSec.HasValue ? TimeSpan.FromSeconds(durationSec.Value) : (TimeSpan?)null;
-
-                _logger.LogInformation("✅ yt-dlp resolved: {Title} → {DirectUrl}", title, directUrl.Substring(0, Math.Min(80, directUrl.Length)));
-
-                return new ResolvedMedia
-                {
-                    DirectUrl = directUrl,
-                    Title = title,
-                    Duration = duration,
-                    OriginalUrl = url
-                };
+                return await ResolveJsonViaYtDlpAsync(url);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "yt-dlp resolution failed for: {Url}", url);
                 return await ResolveViaOpenGraphAsync(url);
             }
+        }
+
+        /// <summary>
+        /// Résout via --dump-json (retourne l'URL CDN directe). Fonctionne pour Instagram.
+        /// </summary>
+        private async Task<ResolvedMedia> ResolveJsonViaYtDlpAsync(string url)
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = _ytdlpPath,
+                Arguments = $"--no-playlist --dump-json -f \"best[vcodec=h264]/best[vcodec^=avc]/best[ext=mp4]/best\" \"{url}\"",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            var process = Process.Start(psi);
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+
+            var exited = await Task.Run(() => process.WaitForExit(30000));
+            if (!exited)
+            {
+                try { process.Kill(); } catch { }
+                _logger.LogWarning("yt-dlp timed out for: {Url}", url);
+                return await ResolveViaOpenGraphAsync(url);
+            }
+
+            var stdout = await stdoutTask;
+            var stderr = await stderrTask;
+
+            if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(stdout))
+            {
+                _logger.LogWarning("yt-dlp failed (exit={Code}): {Err}", process.ExitCode, stderr);
+                return await ResolveViaOpenGraphAsync(url);
+            }
+
+            var json = JObject.Parse(stdout);
+            var directUrl = (string)json["url"];
+
+            if (string.IsNullOrEmpty(directUrl))
+            {
+                var formats = json["formats"] as JArray;
+                if (formats != null && formats.Count > 0)
+                    directUrl = (string)formats[formats.Count - 1]["url"];
+            }
+
+            if (string.IsNullOrEmpty(directUrl))
+            {
+                _logger.LogWarning("yt-dlp returned no URL for: {Url}", url);
+                return await ResolveViaOpenGraphAsync(url);
+            }
+
+            var title = (string)json["title"] ?? "";
+            var durationSec = (double?)json["duration"];
+            TimeSpan? duration = durationSec.HasValue ? TimeSpan.FromSeconds(durationSec.Value) : (TimeSpan?)null;
+
+            // Extraire http_headers pour VLC (Referer + User-Agent requis par les CDN)
+            var headers = json["http_headers"] as JObject;
+            var referrer = (string)headers?["Referer"];
+            var userAgent = (string)headers?["User-Agent"];
+
+            _logger.LogInformation("✅ yt-dlp resolved: {Title} → {DirectUrl}", title, directUrl.Substring(0, Math.Min(80, directUrl.Length)));
+
+            return new ResolvedMedia
+            {
+                DirectUrl = directUrl,
+                Title = title,
+                Duration = duration,
+                OriginalUrl = url,
+                Referrer = referrer,
+                UserAgent = userAgent
+            };
+        }
+
+        /// <summary>
+        /// Télécharge la vidéo en local via yt-dlp en 480p (pour les CDN qui nécessitent des headers spéciaux).
+        /// </summary>
+        private async Task<ResolvedMedia> DownloadViaYtDlpAsync(string url)
+        {
+            var tempDir = Path.Combine(Path.GetTempPath(), "DropCast");
+            Directory.CreateDirectory(tempDir);
+
+            // Nettoyage des anciens fichiers (> 1h)
+            try
+            {
+                foreach (var old in Directory.GetFiles(tempDir, "*.mp4"))
+                {
+                    if (File.GetCreationTimeUtc(old) < DateTime.UtcNow.AddHours(-1))
+                        File.Delete(old);
+                }
+            }
+            catch { }
+
+            var tempFile = Path.Combine(tempDir, Guid.NewGuid().ToString("N") + ".mp4");
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = _ytdlpPath,
+                Arguments = $"--no-playlist -f \"best[vcodec=h264]/best[vcodec^=avc]/best[ext=mp4]/best\" -o \"{tempFile}\" \"{url}\"",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            _logger.LogInformation("⬇️ yt-dlp downloading (480p) to: {Path}", tempFile);
+
+            var process = Process.Start(psi);
+            var stdoutTask = process.StandardOutput.ReadToEndAsync();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+
+            var exited = await Task.Run(() => process.WaitForExit(60000));
+            if (!exited)
+            {
+                try { process.Kill(); } catch { }
+                _logger.LogWarning("yt-dlp download timed out for: {Url}", url);
+                return await ResolveViaOpenGraphAsync(url);
+            }
+
+            await stdoutTask;
+            var stderr = await stderrTask;
+
+            if (!File.Exists(tempFile))
+            {
+                _logger.LogWarning("yt-dlp download failed: {Err}", stderr);
+                return await ResolveViaOpenGraphAsync(url);
+            }
+
+            _logger.LogInformation("✅ yt-dlp downloaded: {Path} ({Size} KB)", tempFile, new System.IO.FileInfo(tempFile).Length / 1024);
+
+            return new ResolvedMedia
+            {
+                DirectUrl = new Uri(tempFile).AbsoluteUri,
+                Title = "",
+                OriginalUrl = url
+            };
         }
 
         private static string MatchFirst(Regex regex, string input)
@@ -406,6 +486,8 @@ namespace DropCast.Services
         public string Title { get; set; }
         public TimeSpan? Duration { get; set; }
         public string OriginalUrl { get; set; }
+        public string Referrer { get; set; }
+        public string UserAgent { get; set; }
 
         /// <summary>True si DirectUrl est un flux direct (CDN). False si c'est une URL de plateforme que VLC gère en interne.</summary>
         public bool IsDirectStream { get; set; } = true;
