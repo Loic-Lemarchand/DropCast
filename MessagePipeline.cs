@@ -117,6 +117,8 @@ namespace DropCast
 
             string caption = TrimParser.StripTrim(message.Caption ?? message.Text);
 
+            _display.SetAuthorInfo(message.AuthorName, message.AuthorAvatarUrl);
+
             // 1) File attachments have priority
             if (message.Attachments != null && message.Attachments.Length > 0)
             {

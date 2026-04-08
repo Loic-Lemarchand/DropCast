@@ -25,18 +25,55 @@ namespace DropCast
         private const int MOD_CONTROL = 0x0002;
         private const int MOD_SHIFT = 0x0004;
 
+        private const int WM_LBUTTONDOWN = 0x0201;
+
         private LibVLC _libVLC;
         private LibVLCSharp.Shared.MediaPlayer _mediaPlayer;
         private CancellationTokenSource _mediaCts = new CancellationTokenSource();
         private static readonly HttpClient _httpClient = new HttpClient();
         private Stopwatch _vlcSw;
-        private VolumePanel _volumePanel;
+        private ControlPanel _controlPanel;
+        private bool _clickToDismissEnabled;
+        private bool _showAuthorInfo;
+        private bool _mediaActive;
+        private string _currentAuthorName;
+        private Image _cachedAvatar;
+        private PictureBox _authorAvatar;
+        private Label _authorLabel;
+        private IntPtr _mouseHookHandle = IntPtr.Zero;
+        private LowLevelMouseProc _mouseHookProc;
 
         public event EventHandler DisplayCompleted;
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+        private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+        private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+        private const int WH_MOUSE_LL = 14;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MSLLHOOKSTRUCT
+        {
+            public Point pt;
+            public uint mouseData;
+            public uint flags;
+            public uint time;
+            public IntPtr dwExtraInfo;
+        }
 
         [DllImport("user32.dll")]
         private static extern bool RegisterHotKey(IntPtr hWnd, int id, int fsModifiers, int vk);
@@ -107,14 +144,52 @@ namespace DropCast
             pictureBox.BackColor = Color.Transparent;
             pictureBox.Parent = this;
 
-            // Volume panel
-            _volumePanel = new VolumePanel();
-            _volumePanel.Volume = _mediaPlayer.Volume;
-            _volumePanel.VolumeChanged += (s, vol) => _mediaPlayer.Volume = vol;
-            _volumePanel.PositionOnScreen();
+            // Author info overlay
+            _authorAvatar = new PictureBox
+            {
+                Size = new Size(40, 40),
+                SizeMode = PictureBoxSizeMode.Zoom,
+                Visible = false,
+                BackColor = Color.Transparent,
+                Parent = this
+            };
+            using (var path = new System.Drawing.Drawing2D.GraphicsPath())
+            {
+                path.AddEllipse(0, 0, 40, 40);
+                _authorAvatar.Region = new Region(path);
+            }
+
+            _authorLabel = new Label
+            {
+                AutoSize = true,
+                Font = new Font("Segoe UI", 12F, FontStyle.Bold),
+                ForeColor = Color.White,
+                BackColor = Color.Transparent,
+                Visible = false,
+                Parent = this
+            };
+
+            // Control panel — wire events first, then apply saved settings
+            var settings = UserSettings.Load();
+            _controlPanel = new ControlPanel();
+            _controlPanel.VolumeChanged += (s, vol) => _mediaPlayer.Volume = vol;
+            _controlPanel.ClickToDismissChanged += (s, enabled) => _clickToDismissEnabled = enabled;
+            _controlPanel.ShowAuthorInfoChanged += (s, enabled) => _showAuthorInfo = enabled;
+            _controlPanel.Volume = settings.Volume;
+            _controlPanel.ClickToDismissEnabled = settings.ClickToDismissEnabled;
+            _controlPanel.ShowAuthorInfoEnabled = settings.ShowAuthorInfoEnabled;
+            _controlPanel.PositionOnScreen();
 
             // Global hotkey: Ctrl+Shift+V
             RegisterHotKey(Handle, HOTKEY_ID_VOLUME, MOD_CONTROL | MOD_SHIFT, (int)Keys.V);
+
+            // Low-level mouse hook for click-to-dismiss (catches clicks even on VLC DirectX surface)
+            _mouseHookProc = MouseHookCallback;
+            using (var curProcess = Process.GetCurrentProcess())
+            using (var curModule = curProcess.MainModule)
+            {
+                _mouseHookHandle = SetWindowsHookEx(WH_MOUSE_LL, _mouseHookProc, GetModuleHandle(curModule.ModuleName), 0);
+            }
         }
 
         private void OnDisplayCompleted()
@@ -126,29 +201,47 @@ namespace DropCast
         {
             if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == HOTKEY_ID_VOLUME)
             {
-                ToggleVolumePanel();
+                ToggleControlPanel();
             }
             base.WndProc(ref m);
         }
 
-        private void ToggleVolumePanel()
+        private void ToggleControlPanel()
         {
-            if (_volumePanel == null) return;
+            if (_controlPanel == null) return;
 
-            if (_volumePanel.Visible)
+            if (_controlPanel.Visible)
             {
-                _volumePanel.Hide();
+                _controlPanel.Hide();
             }
             else
             {
-                _volumePanel.Volume = _mediaPlayer.Volume;
-                _volumePanel.PositionOnScreen();
-                _volumePanel.Show();
-                _volumePanel.Activate();
+                _controlPanel.Volume = _mediaPlayer.Volume;
+                _controlPanel.PositionOnScreen();
+                _controlPanel.Show();
+                _controlPanel.Activate();
             }
         }
 
         // IMediaDisplay implementation
+        public void SetAuthorInfo(string authorName, string avatarUrl)
+        {
+            _currentAuthorName = authorName;
+            var old = _cachedAvatar;
+            _cachedAvatar = null;
+            old?.Dispose();
+
+            if (!string.IsNullOrEmpty(avatarUrl))
+            {
+                try
+                {
+                    var bytes = _httpClient.GetByteArrayAsync(avatarUrl).GetAwaiter().GetResult();
+                    _cachedAvatar = Image.FromStream(new MemoryStream(bytes));
+                }
+                catch { }
+            }
+        }
+
         public void ShowText(string message)
         {
             DisplayMessage(message, false);
@@ -245,7 +338,9 @@ namespace DropCast
                     videoView.Visible = true;
                     Caption.Visible = true;
                     Caption.BringToFront();
+                    ShowAuthorOverlay(videoView);
                     ResumeLayout(true);
+                    _mediaActive = true;
                 }));
             };
 
@@ -257,6 +352,8 @@ namespace DropCast
                 {
                     videoView.Visible = false;
                     Caption.Visible = false;
+                    HideAuthorOverlay();
+                    _mediaActive = false;
                 }));
                 OnDisplayCompleted();
             };
@@ -269,6 +366,8 @@ namespace DropCast
                 {
                     videoView.Visible = false;
                     Caption.Visible = false;
+                    HideAuthorOverlay();
+                    _mediaActive = false;
                 }));
                 OnDisplayCompleted();
             };
@@ -332,7 +431,12 @@ namespace DropCast
             {
                 _mediaPlayer.EndReached -= onEnded;
                 _mediaPlayer.EncounteredError -= onError;
-                BeginInvoke(new Action(() => Caption.Visible = false));
+                BeginInvoke(new Action(() =>
+                {
+                    Caption.Visible = false;
+                    HideAuthorOverlay();
+                    _mediaActive = false;
+                }));
                 OnDisplayCompleted();
             };
 
@@ -340,7 +444,12 @@ namespace DropCast
             {
                 _mediaPlayer.EndReached -= onEnded;
                 _mediaPlayer.EncounteredError -= onError;
-                BeginInvoke(new Action(() => Caption.Visible = false));
+                BeginInvoke(new Action(() =>
+                {
+                    Caption.Visible = false;
+                    HideAuthorOverlay();
+                    _mediaActive = false;
+                }));
                 OnDisplayCompleted();
             };
 
@@ -351,6 +460,9 @@ namespace DropCast
             {
                 _mediaPlayer.Play(media);
             }
+
+            ShowAuthorOverlay(Caption);
+            _mediaActive = true;
         }
 
         public void DisplayImage(string imageUrl, string captionText)
@@ -416,8 +528,10 @@ namespace DropCast
                         Caption.Visible = true;
                         pictureBox.BringToFront();
                         Caption.BringToFront();
+                        ShowAuthorOverlay(pictureBox);
                         ResumeLayout(true);
                         pictureBox.Refresh();
+                        _mediaActive = true;
 
                         Task.Delay(8000, token).ContinueWith(__ =>
                         {
@@ -427,6 +541,8 @@ namespace DropCast
                                 {
                                     pictureBox.Visible = false;
                                     Caption.Visible = false;
+                                    HideAuthorOverlay();
+                                    _mediaActive = false;
                                     pictureBox.Image?.Dispose();
                                 }));
                                 OnDisplayCompleted();
@@ -454,6 +570,8 @@ namespace DropCast
             videoView.Visible = false;
             pictureBox.Visible = false;
             Caption.Visible = false;
+            HideAuthorOverlay();
+            _mediaActive = false;
         }
 
         private void AdjustMediaLayout(Control mediaControl)
@@ -496,10 +614,80 @@ namespace DropCast
             }
         }
 
+        private void ShowAuthorOverlay(Control mediaControl)
+        {
+            if (!_showAuthorInfo || string.IsNullOrEmpty(_currentAuthorName)) return;
+
+            int y = Caption.Bottom + 5;
+            int x = mediaControl.Left;
+
+            if (_cachedAvatar != null)
+            {
+                _authorAvatar.Image = _cachedAvatar;
+                _authorAvatar.SetBounds(x, y, 40, 40);
+                _authorAvatar.Visible = true;
+                _authorAvatar.BringToFront();
+
+                _authorLabel.Text = _currentAuthorName;
+                _authorLabel.Location = new Point(x + 48, y + 8);
+            }
+            else
+            {
+                _authorLabel.Text = _currentAuthorName;
+                _authorLabel.Location = new Point(x, y);
+            }
+
+            _authorLabel.Visible = true;
+            _authorLabel.BringToFront();
+        }
+
+        private void HideAuthorOverlay()
+        {
+            if (_authorAvatar != null) _authorAvatar.Visible = false;
+            if (_authorLabel != null) _authorLabel.Visible = false;
+        }
+
+        private void DismissCurrentMedia()
+        {
+            CancelPreviousMedia();
+            OnDisplayCompleted();
+        }
+
+        private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+        {
+            if (nCode >= 0 && (int)wParam == WM_LBUTTONDOWN && _clickToDismissEnabled && _mediaActive)
+            {
+                var hookStruct = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
+                Point clientPt = PointToClient(hookStruct.pt);
+
+                bool hit = (videoView.Visible && videoView.Bounds.Contains(clientPt)) ||
+                           (pictureBox.Visible && pictureBox.Bounds.Contains(clientPt)) ||
+                           (Caption.Visible && Caption.Bounds.Contains(clientPt)) ||
+                           (_authorAvatar != null && _authorAvatar.Visible && _authorAvatar.Bounds.Contains(clientPt)) ||
+                           (_authorLabel != null && _authorLabel.Visible && _authorLabel.Bounds.Contains(clientPt));
+
+                if (hit)
+                {
+                    BeginInvoke(new Action(DismissCurrentMedia));
+                    return (IntPtr)1;
+                }
+            }
+            return CallNextHookEx(_mouseHookHandle, nCode, wParam, lParam);
+        }
+
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            new UserSettings
+            {
+                Volume = _controlPanel?.Volume ?? 100,
+                ClickToDismissEnabled = _controlPanel?.ClickToDismissEnabled ?? false,
+                ShowAuthorInfoEnabled = _controlPanel?.ShowAuthorInfoEnabled ?? false
+            }.Save();
+
+            if (_mouseHookHandle != IntPtr.Zero)
+                UnhookWindowsHookEx(_mouseHookHandle);
             UnregisterHotKey(Handle, HOTKEY_ID_VOLUME);
-            _volumePanel?.Dispose();
+            _controlPanel?.Dispose();
             base.OnFormClosing(e);
         }
     }

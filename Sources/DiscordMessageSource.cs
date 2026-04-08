@@ -159,6 +159,8 @@ namespace DropCast.Sources
                 Text = rawMessage.Content,
                 Caption = rawMessage.Content,
                 AuthorName = rawMessage.Author.Username,
+                AuthorAvatarUrl = rawMessage.Author.GetAvatarUrl(ImageFormat.Auto, 64)
+                                  ?? rawMessage.Author.GetDefaultAvatarUrl(),
                 SourcePlatform = PlatformName,
                 Attachments = attachments.ToArray()
             };

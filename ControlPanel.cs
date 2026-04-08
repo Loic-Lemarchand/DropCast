@@ -1,16 +1,19 @@
 using System;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
 namespace DropCast
 {
-    public class VolumePanel : Form
+    public class ControlPanel : Form
     {
         private TrackBar _trackBar;
         private Label _volumeLabel;
+        private CheckBox _clickToDismissCheck;
+        private CheckBox _showAuthorCheck;
 
         public event EventHandler<int> VolumeChanged;
+        public event EventHandler<bool> ClickToDismissChanged;
+        public event EventHandler<bool> ShowAuthorInfoChanged;
 
         public int Volume
         {
@@ -18,11 +21,23 @@ namespace DropCast
             set
             {
                 _trackBar.Value = Math.Max(_trackBar.Minimum, Math.Min(_trackBar.Maximum, value));
-                UpdateLabel();
+                UpdateVolumeLabel();
             }
         }
 
-        public VolumePanel()
+        public bool ClickToDismissEnabled
+        {
+            get { return _clickToDismissCheck.Checked; }
+            set { _clickToDismissCheck.Checked = value; }
+        }
+
+        public bool ShowAuthorInfoEnabled
+        {
+            get { return _showAuthorCheck.Checked; }
+            set { _showAuthorCheck.Checked = value; }
+        }
+
+        public ControlPanel()
         {
             SuspendLayout();
 
@@ -31,13 +46,13 @@ namespace DropCast
             ShowInTaskbar = false;
             TopMost = true;
             BackColor = Color.FromArgb(30, 30, 30);
-            Size = new Size(280, 80);
+            Size = new Size(280, 140);
             Padding = new Padding(16, 12, 16, 12);
             DoubleBuffered = true;
 
             var titleLabel = new Label
             {
-                Text = "🔊 Volume DropCast",
+                Text = "🎛️ DropCast",
                 ForeColor = Color.FromArgb(200, 200, 200),
                 Font = new Font("Segoe UI", 9F, FontStyle.Bold),
                 AutoSize = true,
@@ -59,7 +74,7 @@ namespace DropCast
             };
             _trackBar.ValueChanged += (s, e) =>
             {
-                UpdateLabel();
+                UpdateVolumeLabel();
                 VolumeChanged?.Invoke(this, _trackBar.Value);
             };
 
@@ -74,9 +89,37 @@ namespace DropCast
                 BackColor = Color.Transparent
             };
 
+            _clickToDismissCheck = new CheckBox
+            {
+                Text = "🖱️ Clic pour couper",
+                ForeColor = Color.FromArgb(200, 200, 200),
+                Font = new Font("Segoe UI", 9F),
+                AutoSize = true,
+                Location = new Point(16, 74),
+                BackColor = Color.Transparent,
+                Checked = false
+            };
+            _clickToDismissCheck.CheckedChanged += (s, e) =>
+                ClickToDismissChanged?.Invoke(this, _clickToDismissCheck.Checked);
+
+            _showAuthorCheck = new CheckBox
+            {
+                Text = "👤 Afficher l'auteur",
+                ForeColor = Color.FromArgb(200, 200, 200),
+                Font = new Font("Segoe UI", 9F),
+                AutoSize = true,
+                Location = new Point(16, 100),
+                BackColor = Color.Transparent,
+                Checked = false
+            };
+            _showAuthorCheck.CheckedChanged += (s, e) =>
+                ShowAuthorInfoChanged?.Invoke(this, _showAuthorCheck.Checked);
+
             Controls.Add(titleLabel);
             Controls.Add(_trackBar);
             Controls.Add(_volumeLabel);
+            Controls.Add(_clickToDismissCheck);
+            Controls.Add(_showAuthorCheck);
 
             ResumeLayout(false);
         }
@@ -102,7 +145,7 @@ namespace DropCast
             Hide();
         }
 
-        private void UpdateLabel()
+        private void UpdateVolumeLabel()
         {
             _volumeLabel.Text = _trackBar.Value + "%";
         }
