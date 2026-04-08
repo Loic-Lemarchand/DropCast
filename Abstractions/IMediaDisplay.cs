@@ -1,0 +1,14 @@
+namespace DropCast.Abstractions
+{
+    /// <summary>
+    /// Abstraction over the UI that displays memes/media.
+    /// Desktop (WinForms overlay), Android (floating overlay), web, etc.
+    /// </summary>
+    public interface IMediaDisplay
+    {
+        void ShowText(string message);
+        void ShowImage(string imageUrl, string caption);
+        void ShowVideo(string videoUrl, string caption, double? trimStartSeconds, double? trimEndSeconds);
+        void PlayAudio(string audioUrl, string caption);
+    }
+}

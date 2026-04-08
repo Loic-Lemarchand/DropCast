@@ -7,10 +7,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using LibVLCSharp.Shared;
+using DropCast.Abstractions;
 
 namespace DropCast
 {
-    public partial class Form1 : Form
+    public partial class Form1 : Form, IMediaDisplay
     {
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         private const uint SWP_NOSIZE = 0x0001;
@@ -75,6 +76,12 @@ namespace DropCast
             pictureBox.Parent = this;
         }
 
+        // IMediaDisplay implementation
+        public void ShowText(string message)
+        {
+            DisplayMessage(message, false);
+        }
+
         public void DisplayMessage(string message, bool hasTimedMedia)
         {
             if (InvokeRequired)
@@ -105,11 +112,29 @@ namespace DropCast
             }
         }
 
-        public void DisplayVideo(string videoUrl, string captionText)
+        // IMediaDisplay.ShowImage
+        void IMediaDisplay.ShowImage(string imageUrl, string caption)
+        {
+            DisplayImage(imageUrl, caption);
+        }
+
+        // IMediaDisplay.ShowVideo
+        void IMediaDisplay.ShowVideo(string videoUrl, string caption, double? trimStartSeconds, double? trimEndSeconds)
+        {
+            DisplayVideo(videoUrl, caption, trimStartSeconds, trimEndSeconds);
+        }
+
+        // IMediaDisplay.PlayAudio
+        void IMediaDisplay.PlayAudio(string audioUrl, string caption)
+        {
+            PlayAudio(audioUrl, caption);
+        }
+
+        public void DisplayVideo(string videoUrl, string captionText, double? trimStart = null, double? trimEnd = null)
         {
             if (InvokeRequired)
             {
-                Invoke(new Action<string, string>(DisplayVideo), videoUrl, captionText);
+                Invoke(new Action<string, string, double?, double?>(DisplayVideo), videoUrl, captionText, trimStart, trimEnd);
                 return;
             }
 
@@ -170,6 +195,12 @@ namespace DropCast
 
             using (var media = new Media(_libVLC, new Uri(videoUrl)))
             {
+                // Apply trim via LibVLC media options (no ffmpeg needed)
+                if (trimStart.HasValue && trimStart.Value > 0)
+                    media.AddOption(string.Format(":start-time={0:F2}", trimStart.Value));
+                if (trimEnd.HasValue && trimEnd.Value > 0)
+                    media.AddOption(string.Format(":stop-time={0:F2}", trimEnd.Value));
+
                 _mediaPlayer.Play(media);
             }
 

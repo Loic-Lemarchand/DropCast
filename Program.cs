@@ -11,6 +11,9 @@ using Discord.WebSocket;
 using Discord;
 using System.IO;
 using System.Text;
+using DropCast.Abstractions;
+using DropCast.Services;
+using DropCast.Sources;
 
 namespace DropCast
 {
@@ -20,8 +23,10 @@ namespace DropCast
         private static ServiceProvider _services;
         private static ulong _channelId;
         private static Form1 _desktopWindow;
-        private static EventManager _eventManager;
         private static string BotToken;
+
+        private static MessagePipeline _pipeline;
+        private static DiscordMessageSource _discordSource;
 
         [STAThread]
         static void Main()
@@ -43,7 +48,7 @@ namespace DropCast
 
             NLog.LogManager.Configuration = config;
 
-            desktopWindow.Load += async (sender, e) => await DiscordClient(desktopWindow);
+            desktopWindow.Load += async (sender, e) => await StartPipeline(desktopWindow);
             desktopWindow.KeyDown += (sender, e) =>
             {
                 if (e.KeyCode == Keys.F10)
@@ -55,7 +60,11 @@ namespace DropCast
             Application.Run(desktopWindow);
         }
 
-        static async Task DiscordClient(Form1 desktopWindow)
+        /// <summary>
+        /// Initializes the multi-source message pipeline.
+        /// Discord is the first source; add WhatsApp, Telegram, REST API, etc. here.
+        /// </summary>
+        static async Task StartPipeline(Form1 desktopWindow)
         {
             _desktopWindow = desktopWindow;
 
@@ -65,8 +74,10 @@ namespace DropCast
                 {
                     options.BotToken = BotToken;
                 })
-                .AddSingleton<EventManager>()
-                .AddSingleton<IDiscordService, EventManager>()
+                .AddSingleton<VideoResolver>()
+                .AddSingleton<VideoTrimmer>()
+                .AddSingleton<IMediaDisplay>(desktopWindow)
+                .AddSingleton<MessagePipeline>()
                 .AddLogging(logging =>
                 {
                     logging.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Trace);
@@ -78,21 +89,24 @@ namespace DropCast
                 })
                 .BuildServiceProvider();
 
-            _eventManager = _services.GetService<EventManager>();
-            if (_eventManager != null)
-            {
-                _eventManager.SetDesktopWindow(_desktopWindow);
-                await _eventManager.InitializeClient();
-                await _eventManager.ChangeChannel(_channelId);
-            }
+            var logger = _services.GetService<ILogger<DiscordMessageSource>>();
+            _discordSource = new DiscordMessageSource(BotToken, _channelId, logger);
+
+            _pipeline = _services.GetService<MessagePipeline>();
+            _pipeline.RegisterSource(_discordSource);
+
+            // TODO: Register additional sources here:
+            // _pipeline.RegisterSource(new WhatsAppMessageSource(...));
+            // _pipeline.RegisterSource(new TelegramMessageSource(...));
+
+            await _pipeline.ConnectAllAsync();
         }
 
-        static async Task RestartDiscordClient()
+        static void ChangeDiscordChannel(ulong newChannelId)
         {
-            if (_eventManager != null)
-            {
-                await _eventManager.ChangeChannel(_channelId);
-            }
+            _channelId = newChannelId;
+            SaveChannelId(newChannelId);
+            _discordSource?.SetChannelId(newChannelId);
         }
 
         static void OpenChannelInputForm()
@@ -121,13 +135,11 @@ namespace DropCast
                 Width = 100
             };
 
-            confirmButton.Click += async (sender, e) =>
+            confirmButton.Click += (sender, e) =>
             {
                 if (ulong.TryParse(inputBox.Text, out ulong newChannelId))
                 {
-                    _channelId = newChannelId;
-                    SaveChannelId(newChannelId);
-                    await RestartDiscordClient();
+                    ChangeDiscordChannel(newChannelId);
                     inputForm.Close();
                 }
                 else
