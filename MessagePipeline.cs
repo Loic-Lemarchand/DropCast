@@ -96,7 +96,12 @@ namespace DropCast
             {
                 bool dispatched = await DispatchMediaAsync(message);
                 if (dispatched)
-                    await _displayDone.Task;
+                {
+                    if (await Task.WhenAny(_displayDone.Task, Task.Delay(60000)) != _displayDone.Task)
+                    {
+                        _logger.LogWarning("⚠️ Display timed out — resetting pipeline");
+                    }
+                }
             }
             finally
             {

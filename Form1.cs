@@ -485,7 +485,16 @@ namespace DropCast
                 try
                 {
                     Image imgTemp;
-                    byte[] imageBytes = await _httpClient.GetByteArrayAsync(imageUrl);
+                    byte[] imageBytes;
+                    if (imageUrl.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string localPath = new Uri(imageUrl).LocalPath;
+                        imageBytes = File.ReadAllBytes(localPath);
+                    }
+                    else
+                    {
+                        imageBytes = await _httpClient.GetByteArrayAsync(imageUrl);
+                    }
                     // Do not dispose the MemoryStream; Image.FromStream requires it to stay open
                     var ms = new MemoryStream(imageBytes);
                     imgTemp = Image.FromStream(ms);

@@ -95,6 +95,9 @@ namespace DropCast
             _pipeline = _services.GetService<MessagePipeline>();
             _pipeline.RegisterSource(_discordSource);
 
+            var localDropSource = new LocalDropMessageSource();
+            _pipeline.RegisterSource(localDropSource);
+
             // TODO: Register additional sources here:
             // _pipeline.RegisterSource(new WhatsAppMessageSource(...));
             // _pipeline.RegisterSource(new TelegramMessageSource(...));

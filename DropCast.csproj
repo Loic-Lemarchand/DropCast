@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -216,6 +216,13 @@
     <Compile Include="Services\VideoTrimmer.cs" />
     <Compile Include="Services\TrimParser.cs" />
     <Compile Include="Sources\DiscordMessageSource.cs" />
+    <Compile Include="Sources\LocalDropMessageSource.cs" />
+    <Compile Include="DropOverlayForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="DropCaptionDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="MessagePipeline.cs" />
     <Compile Include="DiscordService.cs" />
     <Compile Include="EventManager.cs" />
@@ -272,7 +279,7 @@
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.7.2">
       <Visible>False</Visible>
-      <ProductName>Microsoft .NET FrameworkÃ‚Â 4.7.2 %28x86 et x64%29</ProductName>
+      <ProductName>Microsoft .NET FrameworkÃƒâ€šÃ‚Â 4.7.2 %28x86 et x64%29</ProductName>
       <Install>true</Install>
     </BootstrapperPackage>
     <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
