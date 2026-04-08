@@ -3,7 +3,9 @@ using DropCast.Services;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace DropCast
@@ -19,12 +21,15 @@ namespace DropCast
         private readonly VideoResolver _videoResolver;
         private readonly IMediaDisplay _display;
         private readonly List<IMessageSource> _sources = new List<IMessageSource>();
+        private int _processing; // 0 = idle, 1 = busy
+        private TaskCompletionSource<bool> _displayDone;
 
         public MessagePipeline(ILogger<MessagePipeline> logger, VideoResolver videoResolver, IMediaDisplay display)
         {
             _logger = logger;
             _videoResolver = videoResolver;
             _display = display;
+            _display.DisplayCompleted += (s, e) => _displayDone?.TrySetResult(true);
         }
 
         public void RegisterSource(IMessageSource source)
@@ -79,12 +84,37 @@ namespace DropCast
 
         private async Task ProcessMessageAsync(DropCastMessage message)
         {
-            // Parse optional trim syntax [start-end] from the message text
+            if (Interlocked.CompareExchange(ref _processing, 1, 0) != 0)
+            {
+                _logger.LogInformation("⏳ Meme refusé — un media est déjà en cours d'affichage");
+                _display.ShowText("⏳ Patiente, un meme est déjà en cours !");
+                return;
+            }
+
+            _displayDone = new TaskCompletionSource<bool>();
+            try
+            {
+                bool dispatched = await DispatchMediaAsync(message);
+                if (dispatched)
+                    await _displayDone.Task;
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _processing, 0);
+            }
+        }
+
+        /// <summary>
+        /// Dispatches the message to the appropriate media display.
+        /// Returns true if timed media (video/audio/image) was dispatched and the pipeline
+        /// should wait for <see cref="IMediaDisplay.DisplayCompleted"/> before accepting new messages.
+        /// </summary>
+        private async Task<bool> DispatchMediaAsync(DropCastMessage message)
+        {
             double? trimStart = null;
             double? trimEnd = null;
             TrimParser.TryParse(message.Text, out trimStart, out trimEnd);
 
-            // Strip trim syntax from caption so it doesn't display on screen
             string caption = TrimParser.StripTrim(message.Caption ?? message.Text);
 
             // 1) File attachments have priority
@@ -103,13 +133,13 @@ namespace DropCast
                 {
                     case MediaType.Video:
                         _display.ShowVideo(first.Url, caption, trimStart, trimEnd);
-                        return;
+                        return true;
                     case MediaType.Audio:
                         _display.PlayAudio(first.Url, caption);
-                        return;
+                        return true;
                     case MediaType.Image:
                         _display.ShowImage(first.Url, caption);
-                        return;
+                        return true;
                 }
             }
 
@@ -118,7 +148,6 @@ namespace DropCast
             if (detectedUrls.Count > 0)
             {
                 var target = detectedUrls[0];
-                // Strip both URLs and trim syntax from caption
                 string urlCaption = UrlDetector.StripUrls(caption);
 
                 _logger.LogInformation("🔗 Detected {Platform} URL: {Url}", target.Platform, target.OriginalUrl);
@@ -146,20 +175,22 @@ namespace DropCast
                     {
                         _display.ShowImage(target.OriginalUrl, urlCaption);
                     }
-                    return;
+                    return true;
                 }
 
                 // Resolve via YoutubeExplode (YouTube) or OpenGraph (TikTok, Instagram, Twitter, Reddit)
                 if (_videoResolver.IsAvailable)
                 {
+                    var resolveSw = Stopwatch.StartNew();
                     var resolved = await _videoResolver.ResolveAsync(target.OriginalUrl);
+                    _logger.LogInformation("⏱️ Résolution: {Ms}ms", resolveSw.ElapsedMilliseconds);
                     if (resolved != null)
                     {
                         if (resolved.HasError)
                         {
                             _logger.LogWarning("⚠️ {Error} — {Url}", resolved.Error, target.OriginalUrl);
                             _display.ShowText(resolved.Error);
-                            return;
+                            return false;
                         }
 
                         if (string.IsNullOrWhiteSpace(urlCaption))
@@ -167,7 +198,7 @@ namespace DropCast
 
                         _logger.LogInformation("▶️ Playing resolved video: {Title}", resolved.Title);
                         _display.ShowVideo(resolved.DirectUrl, urlCaption, trimStart, trimEnd);
-                        return;
+                        return true;
                     }
                 }
 
@@ -180,6 +211,8 @@ namespace DropCast
             {
                 _display.ShowText(caption);
             }
+
+            return false;
         }
     }
 }

@@ -2,8 +2,10 @@
 using System.Drawing;
 using System.IO;
 using System.Net;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using LibVLCSharp.Shared;
@@ -21,6 +23,15 @@ namespace DropCast
         private LibVLC _libVLC;
         private LibVLCSharp.Shared.MediaPlayer _mediaPlayer;
         private CancellationTokenSource _mediaCts = new CancellationTokenSource();
+        private static readonly HttpClient _httpClient = new HttpClient();
+        private Stopwatch _vlcSw;
+
+        public event EventHandler DisplayCompleted;
+
+        private void OnDisplayCompleted()
+        {
+            DisplayCompleted?.Invoke(this, EventArgs.Empty);
+        }
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -29,7 +40,13 @@ namespace DropCast
         public Form1()
         {
             Core.Initialize();
-            _libVLC = new LibVLC();
+            _libVLC = new LibVLC(
+                "--avcodec-skiploopfilter=4",
+                "--clock-jitter=0",
+                "--drop-late-frames",
+                "--skip-frames",
+                "--avcodec-hw=any"
+            );
             _mediaPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVLC);
 
             InitializeComponent();
@@ -146,6 +163,13 @@ namespace DropCast
 
             AdjustMediaLayout(videoView);
 
+            // Pre-compute caption layout while media buffers
+            Caption.Text = captionText;
+            Caption.Width = videoView.Width;
+            Caption.MaximumSize = new Size(videoView.Width, 0);
+            AdjustCaptionHeight();
+            Caption.SetBounds(videoView.Left, videoView.Bottom + 10, videoView.Width, Caption.Height);
+
             EventHandler<EventArgs> onPlaying = null;
             EventHandler<EventArgs> onEnded = null;
             EventHandler<EventArgs> onError = null;
@@ -153,17 +177,20 @@ namespace DropCast
             onPlaying = (s, ea) =>
             {
                 _mediaPlayer.Playing -= onPlaying;
+                if (_vlcSw != null)
+                {
+                    Debug.WriteLine(string.Format("⏱️ VLC startup: {0}ms", _vlcSw.ElapsedMilliseconds));
+                    _vlcSw = null;
+                }
                 BeginInvoke(new Action(() =>
                 {
                     if (token.IsCancellationRequested) return;
+
+                    SuspendLayout();
                     videoView.Visible = true;
-                    Caption.Text = captionText;
-                    Caption.Width = videoView.Width;
-                    Caption.MaximumSize = new Size(videoView.Width, 0);
-                    AdjustCaptionHeight();
-                    Caption.SetBounds(videoView.Left, videoView.Bottom + 10, videoView.Width, Caption.Height);
                     Caption.Visible = true;
                     Caption.BringToFront();
+                    ResumeLayout(true);
                 }));
             };
 
@@ -176,6 +203,7 @@ namespace DropCast
                     videoView.Visible = false;
                     Caption.Visible = false;
                 }));
+                OnDisplayCompleted();
             };
 
             onError = (s, ea) =>
@@ -187,6 +215,7 @@ namespace DropCast
                     videoView.Visible = false;
                     Caption.Visible = false;
                 }));
+                OnDisplayCompleted();
             };
 
             _mediaPlayer.Playing += onPlaying;
@@ -195,28 +224,26 @@ namespace DropCast
 
             using (var media = new Media(_libVLC, new Uri(videoUrl)))
             {
-                // Apply trim via LibVLC media options (no ffmpeg needed)
+                // Adapter le buffering selon la source
+                if (videoUrl.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+                {
+                    media.AddOption(":file-caching=0");
+                }
+                else
+                {
+                    media.AddOption(":network-caching=100");
+                    media.AddOption(":file-caching=100");
+                    media.AddOption(":live-caching=100");
+                }
+
                 if (trimStart.HasValue && trimStart.Value > 0)
                     media.AddOption(string.Format(":start-time={0:F2}", trimStart.Value));
                 if (trimEnd.HasValue && trimEnd.Value > 0)
                     media.AddOption(string.Format(":stop-time={0:F2}", trimEnd.Value));
 
+                _vlcSw = Stopwatch.StartNew();
                 _mediaPlayer.Play(media);
             }
-
-            Task.Delay(20000, token).ContinueWith(_ =>
-            {
-                if (!token.IsCancellationRequested)
-                {
-                    // Stop must not be called from a VLC event thread
-                    ThreadPool.QueueUserWorkItem(__ => _mediaPlayer.Stop());
-                    BeginInvoke(new Action(() =>
-                    {
-                        videoView.Visible = false;
-                        Caption.Visible = false;
-                    }));
-                }
-            }, TaskContinuationOptions.OnlyOnRanToCompletion);
         }
 
         public void PlayAudio(string audioUrl, string captionText)
@@ -228,7 +255,6 @@ namespace DropCast
             }
 
             CancelPreviousMedia();
-            var token = _mediaCts.Token;
 
             videoView.Visible = false;
 
@@ -239,22 +265,32 @@ namespace DropCast
             Caption.AdjustHeight();
             Caption.BringToFront();
 
+            EventHandler<EventArgs> onEnded = null;
+            EventHandler<EventArgs> onError = null;
+
+            onEnded = (s, ea) =>
+            {
+                _mediaPlayer.EndReached -= onEnded;
+                _mediaPlayer.EncounteredError -= onError;
+                BeginInvoke(new Action(() => Caption.Visible = false));
+                OnDisplayCompleted();
+            };
+
+            onError = (s, ea) =>
+            {
+                _mediaPlayer.EndReached -= onEnded;
+                _mediaPlayer.EncounteredError -= onError;
+                BeginInvoke(new Action(() => Caption.Visible = false));
+                OnDisplayCompleted();
+            };
+
+            _mediaPlayer.EndReached += onEnded;
+            _mediaPlayer.EncounteredError += onError;
+
             using (var media = new Media(_libVLC, new Uri(audioUrl)))
             {
                 _mediaPlayer.Play(media);
             }
-
-            Task.Delay(15000, token).ContinueWith(_ =>
-            {
-                if (!token.IsCancellationRequested)
-                {
-                    ThreadPool.QueueUserWorkItem(__ => _mediaPlayer.Stop());
-                    BeginInvoke(new Action(() =>
-                    {
-                        Caption.Visible = false;
-                    }));
-                }
-            }, TaskContinuationOptions.OnlyOnRanToCompletion);
         }
 
         public void DisplayImage(string imageUrl, string captionText)
@@ -268,54 +304,60 @@ namespace DropCast
             CancelPreviousMedia();
             var token = _mediaCts.Token;
 
-            Task.Run(() =>
+            // Ensure both are hidden while downloading
+            pictureBox.Visible = false;
+            Caption.Visible = false;
+
+            Task.Run(async () =>
             {
                 try
                 {
                     Image imgTemp;
-                    using (var wc = new WebClient())
-                    {
-                        byte[] imageBytes = wc.DownloadData(imageUrl);
-                        // Do not dispose the MemoryStream; Image.FromStream requires it to stay open
-                        var ms = new MemoryStream(imageBytes);
-                        imgTemp = Image.FromStream(ms);
-                    }
+                    byte[] imageBytes = await _httpClient.GetByteArrayAsync(imageUrl);
+                    // Do not dispose the MemoryStream; Image.FromStream requires it to stay open
+                    var ms = new MemoryStream(imageBytes);
+                    imgTemp = Image.FromStream(ms);
 
                     BeginInvoke(new Action(() =>
                     {
                         if (imgTemp == null || token.IsCancellationRequested) return;
 
-                        int screenWidth = ClientSize.Width;
-                        int screenHeight = ClientSize.Height;
-                        int maxWidth = (int)(screenWidth * 0.6);
-                        int maxHeight = (int)(screenHeight * 0.6);
+                        int sw = ClientSize.Width;
+                        int sh = ClientSize.Height;
+                        int mw = (int)(sw * 0.6);
+                        int mh = (int)(sh * 0.6);
 
                         double aspectRatio = (double)imgTemp.Width / imgTemp.Height;
-                        int newWidth = maxWidth;
-                        int newHeight = (int)(maxWidth / aspectRatio);
+                        int newWidth = mw;
+                        int newHeight = (int)(mw / aspectRatio);
 
-                        if (newHeight > maxHeight)
+                        if (newHeight > mh)
                         {
-                            newHeight = maxHeight;
-                            newWidth = (int)(maxHeight * aspectRatio);
+                            newHeight = mh;
+                            newWidth = (int)(mh * aspectRatio);
                         }
 
-                        int posX = (screenWidth - newWidth) / 2;
+                        int posX = (sw - newWidth) / 2;
                         int posY = 50;
 
                         pictureBox.SizeMode = PictureBoxSizeMode.Zoom;
                         pictureBox.SetBounds(posX, posY, newWidth, newHeight);
                         pictureBox.Image = imgTemp;
-                        pictureBox.Visible = true;
-                        pictureBox.Refresh();
 
                         Caption.Text = captionText;
                         Caption.Width = pictureBox.Width;
                         Caption.MaximumSize = new Size(pictureBox.Width, 0);
                         AdjustCaptionHeight();
                         Caption.SetBounds(pictureBox.Left, pictureBox.Bottom + 10, pictureBox.Width, Caption.Height);
+
+                        // Show both simultaneously using SuspendLayout for atomic update
+                        SuspendLayout();
+                        pictureBox.Visible = true;
                         Caption.Visible = true;
+                        pictureBox.BringToFront();
                         Caption.BringToFront();
+                        ResumeLayout(true);
+                        pictureBox.Refresh();
 
                         Task.Delay(8000, token).ContinueWith(__ =>
                         {
@@ -327,6 +369,7 @@ namespace DropCast
                                     Caption.Visible = false;
                                     pictureBox.Image?.Dispose();
                                 }));
+                                OnDisplayCompleted();
                             }
                         }, TaskContinuationOptions.OnlyOnRanToCompletion);
                     }));
@@ -349,6 +392,8 @@ namespace DropCast
                 _mediaPlayer.Stop();
 
             videoView.Visible = false;
+            pictureBox.Visible = false;
+            Caption.Visible = false;
         }
 
         private void AdjustMediaLayout(Control mediaControl)

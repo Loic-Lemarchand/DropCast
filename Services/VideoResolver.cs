@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -22,6 +24,17 @@ namespace DropCast.Services
         private readonly ILogger<VideoResolver> _logger;
         private readonly YoutubeClient _youtube;
         private readonly HttpClient _http;
+
+        // Cache des résolutions (TTL 1h — les URLs CDN YouTube expirent après ~6h)
+        private readonly ConcurrentDictionary<string, CacheEntry> _cache =
+            new ConcurrentDictionary<string, CacheEntry>(StringComparer.OrdinalIgnoreCase);
+        private static readonly TimeSpan CacheTtl = TimeSpan.FromHours(1);
+
+        private class CacheEntry
+        {
+            public ResolvedMedia Media;
+            public DateTime FetchedAtUtc;
+        }
 
         private static readonly Regex OgVideoRegex = new Regex(
             @"<meta\s[^>]*property\s*=\s*[""']og:video(?::url)?[""'][^>]*content\s*=\s*[""']([^""']+)[""']",
@@ -58,18 +71,31 @@ namespace DropCast.Services
         }
 
         /// <summary>
-        /// <summary>
         /// Resolves any supported platform URL to a direct playable video URL.
         /// Returns null only on unrecoverable errors. Check <see cref="ResolvedMedia.Error"/> for user-facing messages.
         /// </summary>
         public async Task<ResolvedMedia> ResolveAsync(string url)
         {
+            // Cache hit?
+            if (_cache.TryGetValue(url, out var entry) && DateTime.UtcNow - entry.FetchedAtUtc < CacheTtl)
+            {
+                _logger.LogInformation("⚡ Cache hit: {Url}", url);
+                return entry.Media;
+            }
+
             try
             {
+                ResolvedMedia result;
                 if (IsYouTubeUrl(url))
-                    return await ResolveYouTubeAsync(url);
+                    result = await ResolveYouTubeAsync(url);
+                else
+                    result = await ResolveViaOpenGraphAsync(url);
 
-                return await ResolveViaOpenGraphAsync(url);
+                // Cacher les résultats réussis avec un stream direct
+                if (result != null && !result.HasError && result.IsDirectStream)
+                    _cache[url] = new CacheEntry { Media = result, FetchedAtUtc = DateTime.UtcNow };
+
+                return result;
             }
             catch (ArgumentException ex)
             {
@@ -90,28 +116,45 @@ namespace DropCast.Services
             string videoTitle = null;
             TimeSpan? videoDuration = null;
 
-            // Step 1: Get video metadata
             try
             {
-                var video = await _youtube.Videos.GetAsync(url);
-                videoTitle = video.Title;
-                videoDuration = video.Duration;
+                var videoId = YoutubeExplode.Videos.VideoId.Parse(url);
 
-                // Step 2: Try to get stream manifest
-                var manifest = await _youtube.Videos.Streams.GetManifestAsync(video.Id);
+                // Lancer metadata en arrière-plan (non-bloquant pour le titre)
+                var videoTask = _youtube.Videos.GetAsync(videoId).AsTask();
+                videoTask.ContinueWith(t => { var _ = t.Exception; }, TaskContinuationOptions.OnlyOnFaulted);
 
+                // Seul le manifest est nécessaire pour la lecture
+                var manifest = await _youtube.Videos.Streams.GetManifestAsync(videoId).AsTask();
+
+                // Récupérer le titre si déjà disponible (non-bloquant)
+                if (videoTask.Status == TaskStatus.RanToCompletion)
+                {
+                    videoTitle = videoTask.Result.Title;
+                    videoDuration = videoTask.Result.Duration;
+                }
+
+                // Préférer MP4 (H.264) ≤480p — démarrage VLC beaucoup plus rapide
                 var muxed = manifest.GetMuxedStreams()
+                    .Where(s => s.VideoQuality.MaxHeight <= 480 && s.Container.Name == "mp4")
                     .OrderByDescending(s => s.VideoQuality.MaxHeight)
-                    .FirstOrDefault();
+                    .FirstOrDefault()
+                    ?? manifest.GetMuxedStreams()
+                        .Where(s => s.VideoQuality.MaxHeight <= 480)
+                        .OrderByDescending(s => s.VideoQuality.MaxHeight)
+                        .FirstOrDefault()
+                    ?? manifest.GetMuxedStreams()
+                        .OrderBy(s => s.VideoQuality.MaxHeight)
+                        .FirstOrDefault();
 
                 if (muxed != null)
                 {
-                    _logger.LogInformation("✅ YouTube resolved: {Title} ({Quality})", video.Title, muxed.VideoQuality);
+                    _logger.LogInformation("✅ YouTube resolved: {Title} ({Quality})", videoTitle ?? "?", muxed.VideoQuality);
                     return new ResolvedMedia
                     {
                         DirectUrl = muxed.Url,
-                        Title = video.Title,
-                        Duration = video.Duration,
+                        Title = videoTitle,
+                        Duration = videoDuration,
                         OriginalUrl = url
                     };
                 }
@@ -126,8 +169,8 @@ namespace DropCast.Services
                     return new ResolvedMedia
                     {
                         DirectUrl = videoOnly.Url,
-                        Title = video.Title,
-                        Duration = video.Duration,
+                        Title = videoTitle,
+                        Duration = videoDuration,
                         OriginalUrl = url
                     };
                 }
@@ -225,6 +268,9 @@ namespace DropCast.Services
         public string Title { get; set; }
         public TimeSpan? Duration { get; set; }
         public string OriginalUrl { get; set; }
+
+        /// <summary>True si DirectUrl est un flux direct (CDN). False si c'est une URL de plateforme que VLC gère en interne.</summary>
+        public bool IsDirectStream { get; set; } = true;
 
         /// <summary>User-facing error message. When set, DirectUrl should not be used.</summary>
         public string Error { get; set; }

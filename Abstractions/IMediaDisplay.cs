@@ -1,3 +1,5 @@
+using System;
+
 namespace DropCast.Abstractions
 {
     /// <summary>
@@ -6,6 +8,7 @@ namespace DropCast.Abstractions
     /// </summary>
     public interface IMediaDisplay
     {
+        event EventHandler DisplayCompleted;
         void ShowText(string message);
         void ShowImage(string imageUrl, string caption);
         void ShowVideo(string videoUrl, string caption, double? trimStartSeconds, double? trimEndSeconds);
