@@ -20,22 +20,29 @@ namespace DropCast
         private const uint SWP_NOMOVE = 0x0002;
         private const uint TOPMOST_FLAGS = SWP_NOMOVE | SWP_NOSIZE;
 
+        private const int WM_HOTKEY = 0x0312;
+        private const int HOTKEY_ID_VOLUME = 9001;
+        private const int MOD_CONTROL = 0x0002;
+        private const int MOD_SHIFT = 0x0004;
+
         private LibVLC _libVLC;
         private LibVLCSharp.Shared.MediaPlayer _mediaPlayer;
         private CancellationTokenSource _mediaCts = new CancellationTokenSource();
         private static readonly HttpClient _httpClient = new HttpClient();
         private Stopwatch _vlcSw;
+        private VolumePanel _volumePanel;
 
         public event EventHandler DisplayCompleted;
-
-        private void OnDisplayCompleted()
-        {
-            DisplayCompleted?.Invoke(this, EventArgs.Empty);
-        }
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll")]
+        private static extern bool RegisterHotKey(IntPtr hWnd, int id, int fsModifiers, int vk);
+
+        [DllImport("user32.dll")]
+        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
 
         public Form1()
         {
@@ -45,7 +52,15 @@ namespace DropCast
                 "--clock-jitter=0",
                 "--drop-late-frames",
                 "--skip-frames",
-                "--avcodec-hw=any"
+                "--avcodec-hw=any",
+                "--audio-filter=compressor",
+                "--compressor-rms-peak=0",
+                "--compressor-attack=1.5",
+                "--compressor-release=300",
+                "--compressor-threshold=-20",
+                "--compressor-ratio=20",
+                "--compressor-knee=1",
+                "--compressor-makeup-gain=12"
             );
             _mediaPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVLC);
 
@@ -91,6 +106,46 @@ namespace DropCast
 
             pictureBox.BackColor = Color.Transparent;
             pictureBox.Parent = this;
+
+            // Volume panel
+            _volumePanel = new VolumePanel();
+            _volumePanel.Volume = _mediaPlayer.Volume;
+            _volumePanel.VolumeChanged += (s, vol) => _mediaPlayer.Volume = vol;
+            _volumePanel.PositionOnScreen();
+
+            // Global hotkey: Ctrl+Shift+V
+            RegisterHotKey(Handle, HOTKEY_ID_VOLUME, MOD_CONTROL | MOD_SHIFT, (int)Keys.V);
+        }
+
+        private void OnDisplayCompleted()
+        {
+            DisplayCompleted?.Invoke(this, EventArgs.Empty);
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == HOTKEY_ID_VOLUME)
+            {
+                ToggleVolumePanel();
+            }
+            base.WndProc(ref m);
+        }
+
+        private void ToggleVolumePanel()
+        {
+            if (_volumePanel == null) return;
+
+            if (_volumePanel.Visible)
+            {
+                _volumePanel.Hide();
+            }
+            else
+            {
+                _volumePanel.Volume = _mediaPlayer.Volume;
+                _volumePanel.PositionOnScreen();
+                _volumePanel.Show();
+                _volumePanel.Activate();
+            }
         }
 
         // IMediaDisplay implementation
@@ -439,6 +494,13 @@ namespace DropCast
                 Size textSize = TextRenderer.MeasureText(Caption.Text, Caption.Font, new Size(Caption.Width, int.MaxValue), TextFormatFlags.WordBreak);
                 Caption.Height = textSize.Height;
             }
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            UnregisterHotKey(Handle, HOTKEY_ID_VOLUME);
+            _volumePanel?.Dispose();
+            base.OnFormClosing(e);
         }
     }
 }
