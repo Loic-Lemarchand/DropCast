@@ -25,6 +25,7 @@ Discord.Net/
 
 # Secret token
 token.txt
+token.enc
 WebSocketConfig/config.json
 
 # Build artifacts

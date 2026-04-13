@@ -34,7 +34,6 @@ public class OverlayService : Service
 
     // Injected via static — Android services don't support constructor DI easily
     public static DiscordService? Discord { get; set; }
-    public static WhatsAppService? WhatsApp { get; set; }
     public static VideoResolver? Resolver { get; set; }
     public static ILogger<OverlayService>? Logger { get; set; }
 
@@ -63,8 +62,6 @@ public class OverlayService : Service
 
         if (Discord != null)
             Discord.MessageReceived += OnMessageReceived;
-        if (WhatsApp != null)
-            WhatsApp.MessageReceived += OnMessageReceived;
 
         return StartCommandResult.Sticky;
     }
@@ -79,8 +76,6 @@ public class OverlayService : Service
     {
         if (Discord != null)
             Discord.MessageReceived -= OnMessageReceived;
-        if (WhatsApp != null)
-            WhatsApp.MessageReceived -= OnMessageReceived;
         DismissOverlay();
     }
 

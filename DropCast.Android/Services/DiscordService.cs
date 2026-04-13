@@ -109,6 +109,43 @@ public class DiscordService
             .ToList();
     }
 
+    public ulong BotUserId => _client?.CurrentUser?.Id ?? 0;
+
+    public bool IsInGuild(ulong guildId) => _client?.GetGuild(guildId) != null;
+
+    public async Task<(ulong GuildId, string GuildName)?> ResolveInviteAsync(string inviteCode)
+    {
+        if (_client == null) return null;
+        try
+        {
+            var invite = await _client.GetInviteAsync(inviteCode);
+            if (invite?.GuildId == null) return null;
+            return (invite.GuildId.Value, invite.GuildName);
+        }
+        catch { return null; }
+    }
+
+    public string GetBotInviteUrl(ulong guildId)
+    {
+        ulong botId = _client?.CurrentUser?.Id ?? 0;
+        return $"https://discord.com/oauth2/authorize?client_id={botId}&scope=bot&permissions=66560&guild_id={guildId}";
+    }
+
+    public static string ParseInviteCode(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return "";
+        input = input.Trim();
+        if (input.Contains("discord.gg/"))
+            input = input[(input.LastIndexOf("discord.gg/") + "discord.gg/".Length)..];
+        else if (input.Contains("discord.com/invite/"))
+            input = input[(input.LastIndexOf("discord.com/invite/") + "discord.com/invite/".Length)..];
+        int q = input.IndexOf('?');
+        if (q >= 0) input = input[..q];
+        int s = input.IndexOf('/');
+        if (s >= 0) input = input[..s];
+        return input;
+    }
+
     public async Task DisconnectAsync()
     {
         if (_client != null)

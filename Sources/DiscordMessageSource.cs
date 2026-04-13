@@ -131,6 +131,71 @@ namespace DropCast.Sources
         public SocketTextChannel GetSocketTextChannel(ulong channelId) =>
             _client.GetChannel(channelId) as SocketTextChannel;
 
+        public List<(ulong Id, string Name)> GetGuilds()
+        {
+            return _client.Guilds
+                .OrderBy(g => g.Name)
+                .Select(g => (g.Id, g.Name))
+                .ToList();
+        }
+
+        public List<(ulong Id, string Name)> GetTextChannels(ulong guildId)
+        {
+            var guild = _client.GetGuild(guildId);
+            if (guild == null) return new List<(ulong, string)>();
+            return guild.TextChannels
+                .OrderBy(c => c.Position)
+                .Select(c => (c.Id, c.Name))
+                .ToList();
+        }
+
+        public ulong BotUserId => _client.CurrentUser?.Id ?? 0;
+
+        public bool IsInGuild(ulong guildId) => _client.GetGuild(guildId) != null;
+
+        public async Task<InviteInfo> ResolveInviteAsync(string inviteCode)
+        {
+            try
+            {
+                var invite = await _client.GetInviteAsync(inviteCode);
+                if (invite?.GuildId == null) return null;
+                return new InviteInfo { GuildId = invite.GuildId.Value, GuildName = invite.GuildName };
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public string GetBotInviteUrl(ulong guildId)
+        {
+            ulong botId = _client.CurrentUser.Id;
+            return string.Format(
+                "https://discord.com/oauth2/authorize?client_id={0}&scope=bot&permissions=66560&guild_id={1}",
+                botId, guildId);
+        }
+
+        public static string ParseInviteCode(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return null;
+            input = input.Trim();
+            if (input.Contains("discord.gg/"))
+                input = input.Substring(input.LastIndexOf("discord.gg/") + "discord.gg/".Length);
+            else if (input.Contains("discord.com/invite/"))
+                input = input.Substring(input.LastIndexOf("discord.com/invite/") + "discord.com/invite/".Length);
+            int q = input.IndexOf('?');
+            if (q >= 0) input = input.Substring(0, q);
+            int s = input.IndexOf('/');
+            if (s >= 0) input = input.Substring(0, s);
+            return input;
+        }
+
+        public class InviteInfo
+        {
+            public ulong GuildId { get; set; }
+            public string GuildName { get; set; }
+        }
+
         private Task OnDiscordMessage(SocketMessage rawMessage)
         {
             if (rawMessage.Channel.Id != _channelId) return Task.CompletedTask;

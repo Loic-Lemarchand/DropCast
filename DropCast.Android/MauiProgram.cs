@@ -18,7 +18,6 @@ public static class MauiProgram
 
 		// Services
 		builder.Services.AddSingleton<DiscordService>();
-		builder.Services.AddSingleton<WhatsAppService>();
 		builder.Services.AddSingleton<VideoResolver>();
 		builder.Services.AddTransient<MainPage>();
 		builder.Services.AddTransient<OverlayZonePage>();

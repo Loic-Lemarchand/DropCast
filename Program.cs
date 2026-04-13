@@ -19,9 +19,8 @@ namespace DropCast
 {
     internal static class Program
     {
-        private static string ConfigFilePath = "config.txt";
         private static ServiceProvider _services;
-        private static ulong _channelId;
+        private static UserSettings _settings;
         private static Form1 _desktopWindow;
         private static string BotToken;
 
@@ -34,7 +33,8 @@ namespace DropCast
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            _channelId = LoadChannelId();
+            _settings = UserSettings.Load();
+            MigrateConfigTxt();
             BotToken = LoadBotToken();
 
             Form1 desktopWindow = new Form1();
@@ -53,7 +53,7 @@ namespace DropCast
             {
                 if (e.KeyCode == Keys.F10)
                 {
-                    OpenChannelInputForm();
+                    OpenChannelPickerForm();
                 }
             };
 
@@ -62,7 +62,6 @@ namespace DropCast
 
         /// <summary>
         /// Initializes the multi-source message pipeline.
-        /// Discord is the first source; add WhatsApp, Telegram, REST API, etc. here.
         /// </summary>
         static async Task StartPipeline(Form1 desktopWindow)
         {
@@ -90,7 +89,7 @@ namespace DropCast
                 .BuildServiceProvider();
 
             var logger = _services.GetService<ILogger<DiscordMessageSource>>();
-            _discordSource = new DiscordMessageSource(BotToken, _channelId, logger);
+            _discordSource = new DiscordMessageSource(BotToken, _settings.ChannelId, logger);
 
             _pipeline = _services.GetService<MessagePipeline>();
             _pipeline.RegisterSource(_discordSource);
@@ -98,90 +97,69 @@ namespace DropCast
             var localDropSource = new LocalDropMessageSource();
             _pipeline.RegisterSource(localDropSource);
 
-            // TODO: Register additional sources here:
-            // _pipeline.RegisterSource(new WhatsAppMessageSource(...));
-            // _pipeline.RegisterSource(new TelegramMessageSource(...));
-
             await _pipeline.ConnectAllAsync();
         }
 
-        static void ChangeDiscordChannel(ulong newChannelId)
+        static void OpenChannelPickerForm()
         {
-            _channelId = newChannelId;
-            SaveChannelId(newChannelId);
-            _discordSource?.SetChannelId(newChannelId);
-        }
+            if (_discordSource == null) return;
 
-        static void OpenChannelInputForm()
-        {
-            Form inputForm = new Form
+            using (var picker = new ChannelPickerForm(_discordSource, _settings.ServerId, _settings.ChannelId, _settings.ChannelHistory))
             {
-                Text = "Entrer l'ID du canal Discord",
-                Width = 300,
-                Height = 150,
-                StartPosition = FormStartPosition.CenterScreen
-            };
-
-            TextBox inputBox = new TextBox
-            {
-                Left = 20,
-                Top = 20,
-                Width = 240,
-                Text = _channelId.ToString()
-            };
-
-            Button confirmButton = new Button
-            {
-                Text = "Valider",
-                Left = 100,
-                Top = 60,
-                Width = 100
-            };
-
-            confirmButton.Click += (sender, e) =>
-            {
-                if (ulong.TryParse(inputBox.Text, out ulong newChannelId))
+                if (picker.ShowDialog() == DialogResult.OK)
                 {
-                    ChangeDiscordChannel(newChannelId);
-                    inputForm.Close();
-                }
-                else
-                {
-                    MessageBox.Show("Veuillez entrer un ID valide.", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-            };
-
-            inputForm.Controls.Add(inputBox);
-            inputForm.Controls.Add(confirmButton);
-            inputForm.ShowDialog();
-        }
-
-        private static void SaveChannelId(ulong channelId)
-        {
-            File.WriteAllText(ConfigFilePath, channelId.ToString());
-        }
-
-        private static ulong LoadChannelId()
-        {
-            if (File.Exists(ConfigFilePath))
-            {
-                string content = File.ReadAllText(ConfigFilePath);
-                if (ulong.TryParse(content, out ulong savedChannelId))
-                {
-                    return savedChannelId;
+                    _settings.ServerId = picker.SelectedServerId;
+                    _settings.ChannelId = picker.SelectedChannelId;
+                    _settings.AddToHistory(picker.SelectedServerId, picker.SelectedServerName,
+                        picker.SelectedChannelId, picker.SelectedChannelName);
+                    _settings.Save();
+                    _discordSource.SetChannelId(picker.SelectedChannelId);
                 }
             }
-            return 1346607416229236749; // ID par défaut
+        }
+
+        /// <summary>
+        /// One-time migration from legacy config.txt to UserSettings.
+        /// </summary>
+        private static void MigrateConfigTxt()
+        {
+            string configPath = "config.txt";
+            if (_settings.ChannelId == 0 && File.Exists(configPath))
+            {
+                string content = File.ReadAllText(configPath).Trim();
+                if (ulong.TryParse(content, out ulong channelId))
+                {
+                    _settings.ChannelId = channelId;
+                    _settings.Save();
+                }
+                File.Delete(configPath);
+            }
         }
 
         private static string LoadBotToken()
         {
-            string tokenPath = "token.txt";
-            if (File.Exists(tokenPath))
+            string encPath = "token.enc";
+
+            // Try encrypted token first
+            string token = Services.TokenProvider.LoadEncrypted(encPath);
+            if (token != null) return token;
+
+            // Migrate from legacy plain-text token.txt
+            string plainPath = "token.txt";
+            if (File.Exists(plainPath))
             {
-                return File.ReadAllText(tokenPath).Trim();
+                token = File.ReadAllText(plainPath).Trim();
+                Services.TokenProvider.SaveEncrypted(token, encPath);
+                File.Delete(plainPath);
+                return token;
             }
-            throw new FileNotFoundException("Le fichier token.txt est introuvable. Créez-le à la racine du projet avec votre token Discord.");
+
+            // Clean up corrupted token.enc if present
+            if (File.Exists(encPath)) File.Delete(encPath);
+
+            throw new FileNotFoundException(
+                "Le fichier token.enc est introuvable ou corrompu. " +
+                "Placez un fichier token.txt à la racine du projet ; il sera automatiquement chiffré au premier lancement.");
         }
     }
 }

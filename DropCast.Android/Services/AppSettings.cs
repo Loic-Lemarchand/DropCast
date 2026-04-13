@@ -1,16 +1,13 @@
+using System.Text.Json;
+
 namespace DropCast.Android.Services;
+
+public record ChannelHistoryEntry(ulong ServerId, string ServerName, ulong ChannelId, string ChannelName);
 
 public static class AppSettings
 {
-    private const string TokenKey = "discord_bot_token";
     private const string ChannelKey = "discord_channel_id";
-    private const string WhatsAppGroupKey = "whatsapp_group_name";
-
-    public static string BotToken
-    {
-        get => Preferences.Default.Get(TokenKey, "");
-        set => Preferences.Default.Set(TokenKey, value);
-    }
+    private const string HistoryKey = "channel_history_json";
 
     public static ulong ChannelId
     {
@@ -20,12 +17,6 @@ public static class AppSettings
             return ulong.TryParse(str, out var id) ? id : 0;
         }
         set => Preferences.Default.Set(ChannelKey, value.ToString());
-    }
-
-    public static string WhatsAppGroupName
-    {
-        get => Preferences.Default.Get(WhatsAppGroupKey, "");
-        set => Preferences.Default.Set(WhatsAppGroupKey, value);
     }
 
     public static ulong ServerId
@@ -61,5 +52,22 @@ public static class AppSettings
     {
         get => Preferences.Default.Get("overlay_zone_height", 1f);
         set => Preferences.Default.Set("overlay_zone_height", value);
+    }
+
+    public static List<ChannelHistoryEntry> GetChannelHistory()
+    {
+        string json = Preferences.Default.Get(HistoryKey, "");
+        if (string.IsNullOrEmpty(json)) return [];
+        try { return JsonSerializer.Deserialize<List<ChannelHistoryEntry>>(json) ?? []; }
+        catch { return []; }
+    }
+
+    public static void AddToChannelHistory(ulong serverId, string serverName, ulong channelId, string channelName)
+    {
+        var history = GetChannelHistory();
+        history.RemoveAll(h => h.ChannelId == channelId);
+        history.Insert(0, new ChannelHistoryEntry(serverId, serverName, channelId, channelName));
+        if (history.Count > 10) history = history.GetRange(0, 10);
+        Preferences.Default.Set(HistoryKey, JsonSerializer.Serialize(history));
     }
 }

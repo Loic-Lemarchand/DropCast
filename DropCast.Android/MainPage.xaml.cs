@@ -8,22 +8,68 @@ namespace DropCast.Android;
 public partial class MainPage : ContentPage
 {
 	private readonly DiscordService _discord;
-	private readonly WhatsAppService _whatsApp;
 	private readonly VideoResolver _resolver;
 	private readonly ILogger<OverlayService> _overlayLogger;
 
 	private List<DiscordService.DiscordGuildInfo> _guilds = [];
 	private List<DiscordService.DiscordChannelInfo> _channels = [];
+	private List<ChannelHistoryEntry> _recentEntries = [];
 
-	public MainPage(DiscordService discord, WhatsAppService whatsApp, VideoResolver resolver, ILogger<OverlayService> overlayLogger)
+	public MainPage(DiscordService discord, VideoResolver resolver, ILogger<OverlayService> overlayLogger)
 	{
 		InitializeComponent();
 		_discord = discord;
-		_whatsApp = whatsApp;
 		_resolver = resolver;
 		_overlayLogger = overlayLogger;
+	}
 
-		TokenEntry.Text = AppSettings.BotToken;
+	protected override async void OnAppearing()
+	{
+		base.OnAppearing();
+		if (!_discord.IsConnected)
+			await TryAutoConnect();
+	}
+
+	private async Task TryAutoConnect()
+	{
+		// Try extracting the bundled token on first launch
+		await TokenProvider.EnsureTokenFromBundleAsync();
+
+		string? token = TokenProvider.LoadEncrypted(TokenProvider.GetTokenFilePath());
+		if (string.IsNullOrEmpty(token))
+		{
+			// No bundled or local token — fall back to manual entry
+			TokenSection.IsVisible = true;
+			BotStatusLabel.Text = "Entre le token du bot pour commencer";
+			BotStatusLabel.TextColor = Colors.Orange;
+			return;
+		}
+
+		BotStatusLabel.Text = "⏳ Connexion automatique...";
+		BotStatusLabel.TextColor = Colors.Yellow;
+
+		try
+		{
+			await _discord.ConnectAsync(token);
+
+			_guilds = _discord.GetGuilds();
+			ServerPicker.Items.Clear();
+			foreach (var g in _guilds)
+				ServerPicker.Items.Add(g.Name);
+
+			ChannelPickerSection.IsVisible = true;
+			BotStatusLabel.Text = $"✅ Connecté — {_guilds.Count} serveur(s)";
+			BotStatusLabel.TextColor = Colors.LimeGreen;
+
+			PopulateRecentChannels();
+			TryRestoreSavedChannel();
+		}
+		catch
+		{
+			BotStatusLabel.Text = "❌ Auto-connexion échouée";
+			BotStatusLabel.TextColor = Colors.Red;
+			TokenSection.IsVisible = true;
+		}
 	}
 
 	private async void OnConnectBotClicked(object? sender, EventArgs e)
@@ -43,7 +89,7 @@ public partial class MainPage : ContentPage
 		try
 		{
 			await _discord.ConnectAsync(token);
-			AppSettings.BotToken = token;
+			TokenProvider.SaveEncrypted(token, TokenProvider.GetTokenFilePath());
 
 			_guilds = _discord.GetGuilds();
 			ServerPicker.Items.Clear();
@@ -51,9 +97,11 @@ public partial class MainPage : ContentPage
 				ServerPicker.Items.Add(g.Name);
 
 			ChannelPickerSection.IsVisible = true;
+			TokenSection.IsVisible = false;
 			BotStatusLabel.Text = $"✅ Connecté — {_guilds.Count} serveur(s)";
 			BotStatusLabel.TextColor = Colors.LimeGreen;
 
+			PopulateRecentChannels();
 			TryRestoreSavedChannel();
 		}
 		catch (Exception ex)
@@ -91,6 +139,13 @@ public partial class MainPage : ContentPage
 		var channel = _channels[idx];
 		_discord.ChannelId = channel.Id;
 		AppSettings.ChannelId = channel.Id;
+
+		int serverIdx = ServerPicker.SelectedIndex;
+		if (serverIdx >= 0 && serverIdx < _guilds.Count)
+		{
+			var guild = _guilds[serverIdx];
+			AppSettings.AddToChannelHistory(guild.Id, guild.Name, channel.Id, channel.Name);
+		}
 	}
 
 	private void TryRestoreSavedChannel()
@@ -112,6 +167,130 @@ public partial class MainPage : ContentPage
 				break;
 			}
 			break;
+		}
+	}
+
+	private void PopulateRecentChannels()
+	{
+		_recentEntries = AppSettings.GetChannelHistory();
+		if (_recentEntries.Count == 0)
+		{
+			RecentLabel.IsVisible = false;
+			RecentPicker.IsVisible = false;
+			return;
+		}
+
+		RecentLabel.IsVisible = true;
+		RecentPicker.IsVisible = true;
+		RecentPicker.Items.Clear();
+		foreach (var entry in _recentEntries)
+			RecentPicker.Items.Add($"{entry.ServerName} → #{entry.ChannelName}");
+	}
+
+	private void OnRecentChannelChanged(object? sender, EventArgs e)
+	{
+		int idx = RecentPicker.SelectedIndex;
+		if (idx < 0 || idx >= _recentEntries.Count) return;
+
+		var entry = _recentEntries[idx];
+		_discord.ChannelId = entry.ChannelId;
+		AppSettings.ServerId = entry.ServerId;
+		AppSettings.ChannelId = entry.ChannelId;
+
+		for (int i = 0; i < _guilds.Count; i++)
+		{
+			if (_guilds[i].Id != entry.ServerId) continue;
+			ServerPicker.SelectedIndex = i;
+			for (int j = 0; j < _channels.Count; j++)
+			{
+				if (_channels[j].Id != entry.ChannelId) continue;
+				ChannelPicker.SelectedIndex = j;
+				break;
+			}
+			break;
+		}
+	}
+
+	private async void OnAddServerClicked(object? sender, EventArgs e)
+	{
+		string input = InviteEntry.Text?.Trim() ?? "";
+		string code = DiscordService.ParseInviteCode(input);
+		if (string.IsNullOrEmpty(code))
+		{
+			InviteStatusLabel.Text = "Collez un lien d'invitation valide.";
+			InviteStatusLabel.TextColor = Colors.Red;
+			return;
+		}
+
+		AddServerButton.IsEnabled = false;
+		InviteStatusLabel.Text = "⏳ Résolution de l'invitation...";
+		InviteStatusLabel.TextColor = Colors.Yellow;
+
+		try
+		{
+			var info = await _discord.ResolveInviteAsync(code);
+			if (info == null)
+			{
+				InviteStatusLabel.Text = "❌ Invitation invalide ou expirée.";
+				InviteStatusLabel.TextColor = Colors.Red;
+				return;
+			}
+
+			if (_discord.IsInGuild(info.Value.GuildId))
+			{
+				InviteStatusLabel.Text = $"✅ Déjà dans « {info.Value.GuildName} ».";
+				InviteStatusLabel.TextColor = Colors.LimeGreen;
+				RefreshServerList(info.Value.GuildId);
+				return;
+			}
+
+			string url = _discord.GetBotInviteUrl(info.Value.GuildId);
+			await Launcher.OpenAsync(url);
+
+			bool confirmed = await DisplayAlert(
+				"Ajout du bot",
+				"Autorisez le bot dans votre navigateur,\npuis appuyez OK pour rafraîchir.",
+				"OK", "Annuler");
+
+			if (confirmed)
+			{
+				RefreshServerList(info.Value.GuildId);
+				InviteStatusLabel.Text = _discord.IsInGuild(info.Value.GuildId)
+					? "✅ Bot ajouté !"
+					: "⚠️ Le bot n'a pas encore rejoint.";
+				InviteStatusLabel.TextColor = _discord.IsInGuild(info.Value.GuildId)
+					? Colors.LimeGreen
+					: Colors.Orange;
+			}
+		}
+		catch (Exception ex)
+		{
+			InviteStatusLabel.Text = $"❌ {ex.Message}";
+			InviteStatusLabel.TextColor = Colors.Red;
+		}
+		finally
+		{
+			AddServerButton.IsEnabled = true;
+		}
+	}
+
+	private void RefreshServerList(ulong selectGuildId = 0)
+	{
+		_guilds = _discord.GetGuilds();
+		ServerPicker.Items.Clear();
+		foreach (var g in _guilds)
+			ServerPicker.Items.Add(g.Name);
+
+		if (selectGuildId != 0)
+		{
+			for (int i = 0; i < _guilds.Count; i++)
+			{
+				if (_guilds[i].Id == selectGuildId)
+				{
+					ServerPicker.SelectedIndex = i;
+					break;
+				}
+			}
 		}
 	}
 
@@ -146,7 +325,6 @@ public partial class MainPage : ContentPage
 		try
 		{
 			OverlayService.Discord = _discord;
-			OverlayService.WhatsApp = _whatsApp;
 			OverlayService.Resolver = _resolver;
 			OverlayService.Logger = _overlayLogger;
 
@@ -184,6 +362,7 @@ public partial class MainPage : ContentPage
 		StopButton.IsVisible = false;
 
 		ChannelPickerSection.IsVisible = false;
+		TokenSection.IsVisible = true;
 		BotStatusLabel.Text = "";
 	}
 
