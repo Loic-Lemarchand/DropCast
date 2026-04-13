@@ -50,7 +50,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <PropertyGroup>
-    <ApplicationIcon>logo.ico</ApplicationIcon>
+    <ApplicationIcon>DropCast.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup>
     <StartupObject />
@@ -255,6 +255,9 @@
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
     <None Include=".github\copilot-instructions.md" />
+    <None Include="installer\build-apk.ps1" />
+    <None Include="installer\build-installer.ps1" />
+    <None Include="installer\DropCast.iss" />
     <None Include="NLog.config">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
@@ -278,7 +281,7 @@
   <ItemGroup>
     <Content Include=".gitignore" />
     <Content Include="ILLink\ILLink.Descriptors.LibraryBuild.xml" />
-    <Content Include="logo.ico" />
+    <Content Include="DropCast.ico" />
     <Content Include="token.enc" Condition="Exists('token.enc')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

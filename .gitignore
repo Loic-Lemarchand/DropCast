@@ -40,6 +40,13 @@ ehthumbs.db
 Desktop.ini
 .DS_Store
 
+# Installer
+installer/output/
+installer/.nuget/
+
+# Android signing keystore
+DropCast.Android/keystore/
+
 # Rider / ReSharper
 _ReSharper*/
 *.DotSettings.user

@@ -119,6 +119,7 @@ namespace DropCast
 
         private void Form1_Load(object sender, EventArgs e)
         {
+            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             BackColor = Color.Black;
             TransparencyKey = Color.Black;
             FormBorderStyle = FormBorderStyle.None;

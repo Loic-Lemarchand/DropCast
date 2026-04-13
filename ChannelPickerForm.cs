@@ -35,6 +35,7 @@ namespace DropCast
         private void BuildLayout(List<ChannelHistoryEntry> history)
         {
             Text = "📡 Sélection du canal Discord";
+            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
