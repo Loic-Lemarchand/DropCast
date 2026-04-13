@@ -84,8 +84,10 @@ public partial class OverlayZonePage : ContentPage
                 _panStartY = _zoneY;
                 break;
             case GestureStatus.Running:
-                _zoneX = Math.Clamp(_panStartX + e.TotalX, 0, _areaW - _zoneW);
-                _zoneY = Math.Clamp(_panStartY + e.TotalY, 0, _areaH - _zoneH);
+                double dx = e.TotalX + (_zoneX - _panStartX);
+                double dy = e.TotalY + (_zoneY - _panStartY);
+                _zoneX = Math.Clamp(_panStartX + dx, 0, _areaW - _zoneW);
+                _zoneY = Math.Clamp(_panStartY + dy, 0, _areaH - _zoneH);
                 UpdateVisuals();
                 break;
         }
@@ -103,8 +105,10 @@ public partial class OverlayZonePage : ContentPage
             case GestureStatus.Running:
                 double minW = MinZoneFraction * _areaW;
                 double minH = MinZoneFraction * _areaH;
-                double newX = Math.Clamp(_panStartX + e.TotalX, 0, _panStartX + _panStartW - minW);
-                double newY = Math.Clamp(_panStartY + e.TotalY, 0, _panStartY + _panStartH - minH);
+                double dx = e.TotalX + (_zoneX - _panStartX);
+                double dy = e.TotalY + (_zoneY - _panStartY);
+                double newX = Math.Clamp(_panStartX + dx, 0, _panStartX + _panStartW - minW);
+                double newY = Math.Clamp(_panStartY + dy, 0, _panStartY + _panStartH - minH);
                 _zoneW = _panStartW + (_panStartX - newX);
                 _zoneH = _panStartH + (_panStartY - newY);
                 _zoneX = newX;
@@ -126,8 +130,10 @@ public partial class OverlayZonePage : ContentPage
             case GestureStatus.Running:
                 double minW = MinZoneFraction * _areaW;
                 double minH = MinZoneFraction * _areaH;
-                _zoneW = Math.Clamp(_panStartW + e.TotalX, minW, _areaW - _zoneX);
-                double newY = Math.Clamp(_panStartY + e.TotalY, 0, _panStartY + _panStartH - minH);
+                double dx = e.TotalX + (_zoneW - _panStartW);
+                double dy = e.TotalY + (_zoneY - _panStartY);
+                _zoneW = Math.Clamp(_panStartW + dx, minW, _areaW - _zoneX);
+                double newY = Math.Clamp(_panStartY + dy, 0, _panStartY + _panStartH - minH);
                 _zoneH = _panStartH + (_panStartY - newY);
                 _zoneY = newY;
                 UpdateVisuals();
@@ -147,10 +153,12 @@ public partial class OverlayZonePage : ContentPage
             case GestureStatus.Running:
                 double minW = MinZoneFraction * _areaW;
                 double minH = MinZoneFraction * _areaH;
-                double newX = Math.Clamp(_panStartX + e.TotalX, 0, _panStartX + _panStartW - minW);
+                double dx = e.TotalX + (_zoneX - _panStartX);
+                double dy = e.TotalY + (_zoneH - _panStartH);
+                double newX = Math.Clamp(_panStartX + dx, 0, _panStartX + _panStartW - minW);
                 _zoneW = _panStartW + (_panStartX - newX);
                 _zoneX = newX;
-                _zoneH = Math.Clamp(_panStartH + e.TotalY, minH, _areaH - _zoneY);
+                _zoneH = Math.Clamp(_panStartH + dy, minH, _areaH - _zoneY);
                 UpdateVisuals();
                 break;
         }
@@ -167,8 +175,10 @@ public partial class OverlayZonePage : ContentPage
             case GestureStatus.Running:
                 double minW = MinZoneFraction * _areaW;
                 double minH = MinZoneFraction * _areaH;
-                _zoneW = Math.Clamp(_panStartW + e.TotalX, minW, _areaW - _zoneX);
-                _zoneH = Math.Clamp(_panStartH + e.TotalY, minH, _areaH - _zoneY);
+                double dx = e.TotalX + (_zoneW - _panStartW);
+                double dy = e.TotalY + (_zoneH - _panStartH);
+                _zoneW = Math.Clamp(_panStartW + dx, minW, _areaW - _zoneX);
+                _zoneH = Math.Clamp(_panStartH + dy, minH, _areaH - _zoneY);
                 UpdateVisuals();
                 break;
         }

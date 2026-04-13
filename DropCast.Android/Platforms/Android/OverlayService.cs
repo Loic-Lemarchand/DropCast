@@ -325,14 +325,29 @@ public class OverlayService : Service
             _captionView!.Visibility = ViewStates.Gone;
         }
 
+        // Safety fallback in case the video never prepares
+        ScheduleAutoDismiss(60000);
+
         _videoView.SetOnPreparedListener(new MediaPreparedListener(trimStart, trimEnd, () =>
         {
-            int duration = _videoView.Duration;
-            if (duration > 0)
-                _handler.PostDelayed(() => DismissOverlay(), duration + 1000);
+            int fullDuration = _videoView!.Duration;
+            int effectiveMs;
+            if (trimEnd.HasValue)
+            {
+                int endMs = (int)(trimEnd.Value * 1000);
+                int startMs = trimStart.HasValue ? (int)(trimStart.Value * 1000) : 0;
+                effectiveMs = endMs - startMs;
+            }
+            else if (trimStart.HasValue)
+            {
+                effectiveMs = fullDuration - (int)(trimStart.Value * 1000);
+            }
             else
-                _handler.PostDelayed(() => DismissOverlay(), 60000);
-        }));
+            {
+                effectiveMs = fullDuration;
+            }
+            ScheduleAutoDismiss(effectiveMs > 0 ? effectiveMs + 1000 : 60000);
+        }, () => DismissOverlay()));
         _videoView.SetOnCompletionListener(new MediaCompletionListener(() => DismissOverlay()));
         _videoView.SetOnErrorListener(new MediaErrorListener(() =>
         {
@@ -341,8 +356,7 @@ public class OverlayService : Service
             _videoView.Visibility = ViewStates.Gone;
             _memeTextView!.Visibility = ViewStates.Visible;
             _memeTextView.Text = "❌ Impossible de lire cette vidéo";
-            _handler.RemoveCallbacksAndMessages(null);
-            _handler.PostDelayed(() => DismissOverlay(), 5000);
+            ScheduleAutoDismiss(5000);
         }));
 
         // Local temp file or remote URL
@@ -384,7 +398,7 @@ public class OverlayService : Service
                 }
 
                 AddOverlayToWindow();
-                _handler.PostDelayed(() => DismissOverlay(), 10000);
+                ScheduleAutoDismiss(8000);
             });
         }
         catch (Exception ex)
@@ -404,8 +418,13 @@ public class OverlayService : Service
         _memeTextView.Text = text;
         _authorView!.Text = author;
         AddOverlayToWindow();
+        ScheduleAutoDismiss(8000);
+    }
 
-        _handler.PostDelayed(() => DismissOverlay(), 8000);
+    private void ScheduleAutoDismiss(int delayMs)
+    {
+        _handler.RemoveCallbacksAndMessages(null);
+        _handler.PostDelayed(() => DismissOverlay(), delayMs);
     }
 
     private void DismissOverlay()
@@ -466,7 +485,7 @@ public class OverlayService : Service
     }
 
     // Helper listener classes for VideoView
-    private class MediaPreparedListener(double? trimStart, double? trimEnd, Action onPrepared) : Java.Lang.Object, MediaPlayer.IOnPreparedListener
+    private class MediaPreparedListener(double? trimStart, double? trimEnd, Action onPrepared, Action? onTrimStop = null) : Java.Lang.Object, MediaPlayer.IOnPreparedListener
     {
         public void OnPrepared(MediaPlayer? mp)
         {
@@ -475,11 +494,12 @@ public class OverlayService : Service
                 mp.SeekTo((int)(trimStart.Value * 1000));
             if (trimEnd.HasValue)
             {
-                // Schedule stop at trim end
+                // Schedule stop at trim end, then dismiss overlay
                 int stopAt = (int)(trimEnd.Value * 1000) - (trimStart.HasValue ? (int)(trimStart.Value * 1000) : 0);
                 new Handler(Looper.MainLooper!).PostDelayed(() =>
                 {
                     try { mp.Stop(); } catch { }
+                    onTrimStop?.Invoke();
                 }, Math.Max(stopAt, 1000));
             }
             onPrepared();
