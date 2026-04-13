@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="DropCast.Android.OverlayZonePage"
+             BackgroundColor="#1a1a2e"
+             Title="Zone d'affichage"
+             Shell.NavBarIsVisible="True">
+
+    <Grid RowDefinitions="Auto,*,Auto" Padding="0">
+
+        <VerticalStackLayout Grid.Row="0" Padding="16,16,16,8" Spacing="4">
+            <Label Text="Zone d'affichage" FontSize="20" FontAttributes="Bold" TextColor="White" HorizontalOptions="Center"/>
+            <Label Text="Déplacez le rectangle ou tirez les coins" FontSize="13" TextColor="#888" HorizontalOptions="Center"/>
+            <Label x:Name="ZoneSizeLabel" Text="" FontSize="12" TextColor="#6c5ce7" HorizontalOptions="Center"/>
+        </VerticalStackLayout>
+
+        <AbsoluteLayout Grid.Row="1" x:Name="PreviewArea"
+                         BackgroundColor="#1a1a2e"
+                         SizeChanged="OnAreaSizeChanged">
+
+            <!-- Dim overlays (outside zone = dark) -->
+            <BoxView x:Name="DimTop" Color="#CC000000" InputTransparent="True" AbsoluteLayout.LayoutFlags="None"/>
+            <BoxView x:Name="DimBottom" Color="#CC000000" InputTransparent="True" AbsoluteLayout.LayoutFlags="None"/>
+            <BoxView x:Name="DimLeft" Color="#CC000000" InputTransparent="True" AbsoluteLayout.LayoutFlags="None"/>
+            <BoxView x:Name="DimRight" Color="#CC000000" InputTransparent="True" AbsoluteLayout.LayoutFlags="None"/>
+
+            <!-- Zone body (draggable) -->
+            <Border x:Name="ZoneBox"
+                    BackgroundColor="Transparent"
+                    Stroke="#6c5ce7"
+                    StrokeThickness="2.5"
+                    StrokeShape="RoundRectangle 6,6,6,6"
+                    AbsoluteLayout.LayoutFlags="None">
+                <Border.GestureRecognizers>
+                    <PanGestureRecognizer PanUpdated="OnZonePan"/>
+                </Border.GestureRecognizers>
+            </Border>
+
+            <!-- Rule-of-thirds grid lines -->
+            <BoxView x:Name="GridH1" Color="#306c5ce7" InputTransparent="True" AbsoluteLayout.LayoutFlags="None"/>
+            <BoxView x:Name="GridH2" Color="#306c5ce7" InputTransparent="True" AbsoluteLayout.LayoutFlags="None"/>
+            <BoxView x:Name="GridV1" Color="#306c5ce7" InputTransparent="True" AbsoluteLayout.LayoutFlags="None"/>
+            <BoxView x:Name="GridV2" Color="#306c5ce7" InputTransparent="True" AbsoluteLayout.LayoutFlags="None"/>
+
+            <!-- Corner handles -->
+            <BoxView x:Name="HandleTL" Color="White" CornerRadius="22"
+                     WidthRequest="44" HeightRequest="44" Opacity="0.92"
+                     AbsoluteLayout.LayoutFlags="None">
+                <BoxView.Shadow>
+                    <Shadow Brush="Black" Offset="0,2" Radius="6" Opacity="0.4"/>
+                </BoxView.Shadow>
+                <BoxView.GestureRecognizers>
+                    <PanGestureRecognizer PanUpdated="OnHandleTLPan"/>
+                </BoxView.GestureRecognizers>
+            </BoxView>
+            <BoxView x:Name="HandleTR" Color="White" CornerRadius="22"
+                     WidthRequest="44" HeightRequest="44" Opacity="0.92"
+                     AbsoluteLayout.LayoutFlags="None">
+                <BoxView.Shadow>
+                    <Shadow Brush="Black" Offset="0,2" Radius="6" Opacity="0.4"/>
+                </BoxView.Shadow>
+                <BoxView.GestureRecognizers>
+                    <PanGestureRecognizer PanUpdated="OnHandleTRPan"/>
+                </BoxView.GestureRecognizers>
+            </BoxView>
+            <BoxView x:Name="HandleBL" Color="White" CornerRadius="22"
+                     WidthRequest="44" HeightRequest="44" Opacity="0.92"
+                     AbsoluteLayout.LayoutFlags="None">
+                <BoxView.Shadow>
+                    <Shadow Brush="Black" Offset="0,2" Radius="6" Opacity="0.4"/>
+                </BoxView.Shadow>
+                <BoxView.GestureRecognizers>
+                    <PanGestureRecognizer PanUpdated="OnHandleBLPan"/>
+                </BoxView.GestureRecognizers>
+            </BoxView>
+            <BoxView x:Name="HandleBR" Color="White" CornerRadius="22"
+                     WidthRequest="44" HeightRequest="44" Opacity="0.92"
+                     AbsoluteLayout.LayoutFlags="None">
+                <BoxView.Shadow>
+                    <Shadow Brush="Black" Offset="0,2" Radius="6" Opacity="0.4"/>
+                </BoxView.Shadow>
+                <BoxView.GestureRecognizers>
+                    <PanGestureRecognizer PanUpdated="OnHandleBRPan"/>
+                </BoxView.GestureRecognizers>
+            </BoxView>
+
+        </AbsoluteLayout>
+
+        <HorizontalStackLayout Grid.Row="2" HorizontalOptions="Center" Spacing="16" Padding="16,12">
+            <Button Text="Plein écran" BackgroundColor="#2d3436" TextColor="#ddd"
+                    FontSize="14" CornerRadius="8" Clicked="OnResetClicked"/>
+            <Button Text="Sauvegarder" BackgroundColor="#6c5ce7" TextColor="White"
+                    FontSize="14" CornerRadius="8" Clicked="OnSaveClicked"/>
+        </HorizontalStackLayout>
+
+    </Grid>
+</ContentPage>

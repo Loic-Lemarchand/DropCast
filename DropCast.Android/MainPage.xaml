@@ -1,0 +1,43 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="DropCast.Android.MainPage"
+             BackgroundColor="#1a1a2e"
+             Title="DropCast">
+
+    <ScrollView Padding="24">
+        <VerticalStackLayout Spacing="16">
+            <Label Text="DropCast" FontSize="32" FontAttributes="Bold" TextColor="White" HorizontalOptions="Center" />
+            <Label Text="Recois tes memes en overlay" FontSize="14" TextColor="#888" HorizontalOptions="Center" />
+
+            <!-- Discord Section -->
+            <BoxView HeightRequest="1" Color="#333" Margin="0,8" />
+            <Label Text="Discord" FontSize="18" FontAttributes="Bold" TextColor="#6c5ce7" />
+            <Label Text="Bot Token" TextColor="#aaa" FontSize="13" />
+            <Entry x:Name="TokenEntry" Placeholder="Colle ton token Discord ici" PlaceholderColor="#555" TextColor="White" BackgroundColor="#2a2a4a" IsPassword="True" FontSize="14" />
+            <Button x:Name="ConnectBotButton" Text="Connecter le bot" BackgroundColor="#6c5ce7" TextColor="White" FontSize="14" CornerRadius="8" Clicked="OnConnectBotClicked" />
+            <Label x:Name="BotStatusLabel" Text="" TextColor="#888" FontSize="12" />
+
+            <!-- Server/Channel pickers (hidden until bot connects) -->
+            <VerticalStackLayout x:Name="ChannelPickerSection" IsVisible="False" Spacing="10">
+                <Label Text="Serveur" TextColor="#aaa" FontSize="13" />
+                <Picker x:Name="ServerPicker" Title="Choisir un serveur" TextColor="White" TitleColor="#555" BackgroundColor="#2a2a4a"
+                        SelectedIndexChanged="OnServerChanged" />
+                <Label Text="Salon" TextColor="#aaa" FontSize="13" />
+                <Picker x:Name="ChannelPicker" Title="Choisir un salon" TextColor="White" TitleColor="#555" BackgroundColor="#2a2a4a"
+                        SelectedIndexChanged="OnChannelChanged" />
+            </VerticalStackLayout>
+
+            <!-- Overlay Zone -->
+            <BoxView HeightRequest="1" Color="#333" Margin="0,8" />
+            <Button Text="📐 Configurer la zone d'affichage" BackgroundColor="#2d3436" TextColor="#ddd" FontSize="13" CornerRadius="8" Clicked="OnZoneConfigClicked" />
+
+            <!-- Controls -->
+            <BoxView HeightRequest="1" Color="#333" Margin="0,8" />
+            <Label x:Name="StatusLabel" Text="Deconnecte" TextColor="#888" FontSize="15" HorizontalOptions="Center" />
+            <Button x:Name="StartButton" Text="Demarrer overlay" BackgroundColor="#6c5ce7" TextColor="White" FontSize="16" CornerRadius="12" Clicked="OnStartClicked" />
+            <Button x:Name="StopButton" Text="Arreter" BackgroundColor="#d63031" TextColor="White" FontSize="16" CornerRadius="12" IsVisible="False" Clicked="OnStopClicked" />
+            <Button Text="Permission overlay" BackgroundColor="#2d3436" TextColor="#ddd" FontSize="13" CornerRadius="8" Clicked="OnOverlayPermissionClicked" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>
