@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace DropCast.Sources
@@ -94,6 +95,10 @@ namespace DropCast.Sources
         public string PlatformName => "Discord";
         public event EventHandler<DropCastMessage> MessageReceived;
 
+        private readonly object _selfPostedLock = new object();
+        private readonly HashSet<ulong> _selfPostedIds = new HashSet<ulong>();
+        private int _pendingUploads;
+
         public DiscordMessageSource(string botToken, ulong channelId, ILogger logger)
         {
             _botToken = botToken;
@@ -175,6 +180,38 @@ namespace DropCast.Sources
                 botId, guildId);
         }
 
+        /// <summary>
+        /// Uploads a local file to the currently selected Discord channel.
+        /// The resulting message ID is tracked so the local gateway echo is skipped.
+        /// </summary>
+        public async Task UploadFileAsync(string filePath, string caption)
+        {
+            var channel = _client.GetChannel(_channelId) as IMessageChannel;
+            if (channel == null)
+            {
+                _logger.LogWarning("Cannot upload file: channel {ChannelId} not found or not accessible", _channelId);
+                return;
+            }
+
+            Interlocked.Increment(ref _pendingUploads);
+            try
+            {
+                var msg = await channel.SendFileAsync(filePath, text: string.IsNullOrWhiteSpace(caption) ? null : caption);
+                lock (_selfPostedLock)
+                    _selfPostedIds.Add(msg.Id);
+                _logger.LogInformation("📤 Uploaded {File} to channel {Channel} (msg {Id})",
+                    System.IO.Path.GetFileName(filePath), _channelId, msg.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to upload {File} to Discord", System.IO.Path.GetFileName(filePath));
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _pendingUploads);
+            }
+        }
+
         public static string ParseInviteCode(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return null;
@@ -200,7 +237,24 @@ namespace DropCast.Sources
         {
             if (rawMessage.Channel.Id != _channelId) return Task.CompletedTask;
             if (!(rawMessage is SocketUserMessage userMessage)) return Task.CompletedTask;
-            if (userMessage.Author.IsBot) return Task.CompletedTask;
+
+            // Messages from our own bot: skip echo of uploads we sent, process others
+            if (rawMessage.Author.Id == _client.CurrentUser?.Id)
+            {
+                lock (_selfPostedLock)
+                {
+                    if (_selfPostedIds.Remove(rawMessage.Id))
+                        return Task.CompletedTask;
+                }
+                // Gateway can fire before SendFileAsync returns the ID — if we have
+                // pending uploads this message is almost certainly the echo.
+                if (_pendingUploads > 0)
+                    return Task.CompletedTask;
+            }
+            else if (userMessage.Author.IsBot)
+            {
+                return Task.CompletedTask;
+            }
 
             var attachments = new List<MediaContent>();
             foreach (var att in rawMessage.Attachments)

@@ -7,25 +7,35 @@ using System.Windows.Forms;
 namespace DropCast
 {
     /// <summary>
-    /// Overlay that appears only while the user is dragging something (detected via
-    /// <c>GetAsyncKeyState</c> + cursor movement polling). Accepts file drops from
-    /// Windows Explorer / Desktop, then fires <see cref="FilesDropped"/>.
+    /// Overlay that appears only while a real OLE drag-drop operation is in progress.
+    /// Detection: polls for the <c>SysDragImage</c> window that Windows Shell creates
+    /// whenever an OLE file drag is initiated from Explorer / Desktop.
+    /// This window does NOT exist during regular left-click drags, so there are
+    /// no false positives.
     /// </summary>
     public class DropOverlayForm : Form
     {
+        // ── Palette ──
+        private static readonly Color BgIdle = Color.FromArgb(13, 43, 62);
+        private static readonly Color BgHover = Color.FromArgb(20, 61, 84);
+        private static readonly Color Accent = Color.FromArgb(42, 191, 191);
+        private static readonly Color AccentLight = Color.FromArgb(72, 209, 204);
+        private static readonly Color BorderIdle = Color.FromArgb(30, 74, 95);
+
         private const int NormalSize = 70;
         private const int ExpandedSize = 130;
         private bool _isDragOver;
+        private bool _handleReady;
 
-        // --- drag-detection polling ---
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+
         [DllImport("user32.dll")]
         private static extern short GetAsyncKeyState(int vKey);
         private const int VK_LBUTTON = 0x01;
 
         private readonly Timer _dragDetectTimer;
-        private int _dragMoveTicks;
-        private Point _lastCursorPos;
-        private bool _handleReady;
+        private bool _dragTracking;
 
         public event EventHandler<string[]> FilesDropped;
 
@@ -37,7 +47,7 @@ namespace DropCast
             TopMost = true;
             AllowDrop = true;
             Size = new Size(NormalSize, NormalSize);
-            BackColor = Color.FromArgb(40, 40, 40);
+            BackColor = BgIdle;
             Opacity = 0.55;
             DoubleBuffered = true;
 
@@ -77,37 +87,44 @@ namespace DropCast
             }
         }
 
-        // ---- drag-detection via polling ----
+        // ---- OLE drag detection via SysDragImage window ----
+
+        /// <summary>
+        /// Returns <c>true</c> when the Shell drag-image window exists, which means
+        /// an OLE file drag from Explorer / Desktop is currently in progress.
+        /// </summary>
+        private static bool IsOleDragActive()
+        {
+            return FindWindow("SysDragImage", null) != IntPtr.Zero;
+        }
 
         private void OnDragDetectTick(object sender, EventArgs e)
         {
             bool lbDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
 
-            if (lbDown)
+            if (_dragTracking)
             {
-                Point cur = Cursor.Position;
-                if (cur != _lastCursorPos)
+                // Keep showing until the mouse button is released
+                if (!lbDown)
                 {
-                    _dragMoveTicks++;
-                    _lastCursorPos = cur;
+                    _dragTracking = false;
+                    if (Visible && !_isDragOver)
+                        Visible = false;
                 }
+                return;
+            }
 
-                // ~320 ms of continuous dragging → show the overlay
-                if (_dragMoveTicks >= 4 && !Visible)
+            // Detect new OLE drag via SysDragImage window
+            if (IsOleDragActive())
+            {
+                _dragTracking = true;
+                if (!Visible)
                 {
                     _isDragOver = false;
                     Size = new Size(NormalSize, NormalSize);
                     Opacity = 0.55;
                     PositionOnScreen(NormalSize);
                     Visible = true;
-                }
-            }
-            else
-            {
-                _dragMoveTicks = 0;
-                if (Visible && !_isDragOver)
-                {
-                    Visible = false;
                 }
             }
         }
@@ -145,6 +162,7 @@ namespace DropCast
         private void OnDragDrop(object sender, DragEventArgs e)
         {
             _isDragOver = false;
+            _dragTracking = false;
             Visible = false;
 
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
@@ -167,24 +185,25 @@ namespace DropCast
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
-            // Background
-            using (var brush = new SolidBrush(_isDragOver ? Color.FromArgb(40, 80, 160) : Color.FromArgb(40, 40, 40)))
+            // Rounded background
+            int r = 12;
+            using (var path = RoundedRect(ClientRectangle, r))
             {
-                g.FillRectangle(brush, ClientRectangle);
-            }
+                using (var brush = new SolidBrush(_isDragOver ? BgHover : BgIdle))
+                    g.FillPath(brush, path);
 
-            // Border
-            using (var pen = new Pen(_isDragOver ? Color.FromArgb(100, 180, 255) : Color.FromArgb(80, 80, 80), 2))
-            {
-                g.DrawRectangle(pen, 1, 1, Width - 3, Height - 3);
+                using (var pen = new Pen(_isDragOver ? Accent : BorderIdle, 2))
+                    g.DrawPath(pen, path);
             }
 
             // Dashed inner border when drag is over
             if (_isDragOver)
             {
-                using (var pen = new Pen(Color.FromArgb(150, 200, 255), 1) { DashStyle = DashStyle.Dash })
+                var inner = new Rectangle(6, 6, Width - 13, Height - 13);
+                using (var path = RoundedRect(inner, 8))
+                using (var pen = new Pen(AccentLight, 1) { DashStyle = DashStyle.Dash })
                 {
-                    g.DrawRectangle(pen, 6, 6, Width - 13, Height - 13);
+                    g.DrawPath(pen, path);
                 }
             }
 
@@ -203,11 +222,24 @@ namespace DropCast
             {
                 using (var textFont = new Font("Segoe UI", 11F, FontStyle.Bold))
                 using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                using (var brush = new SolidBrush(AccentLight))
                 {
                     var textRect = new RectangleF(0, Height * 0.55f, Width, Height * 0.4f);
-                    g.DrawString("Drop ici !", textFont, Brushes.White, textRect, sf);
+                    g.DrawString("Drop ici !", textFont, brush, textRect, sf);
                 }
             }
+        }
+
+        private static GraphicsPath RoundedRect(Rectangle bounds, int radius)
+        {
+            int d = radius * 2;
+            var path = new GraphicsPath();
+            path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
+            path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
+            path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
+            path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
+            path.CloseFigure();
+            return path;
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)

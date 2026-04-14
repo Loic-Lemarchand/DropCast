@@ -162,7 +162,10 @@ public class DiscordService
     {
         if (rawMessage.Channel.Id != _channelId) return Task.CompletedTask;
         if (rawMessage is not SocketUserMessage userMessage) return Task.CompletedTask;
-        if (userMessage.Author.IsBot) return Task.CompletedTask;
+        // Allow messages from our own bot (e.g. drag-and-drop uploads from the desktop app)
+        // but ignore other bots.
+        if (userMessage.Author.IsBot && rawMessage.Author.Id != (_client?.CurrentUser?.Id ?? 0))
+            return Task.CompletedTask;
 
         var attachments = new List<MediaContent>();
         foreach (var att in rawMessage.Attachments)

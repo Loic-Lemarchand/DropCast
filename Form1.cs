@@ -22,8 +22,6 @@ namespace DropCast
 
         private const int WM_HOTKEY = 0x0312;
         private const int HOTKEY_ID_VOLUME = 9001;
-        private const int MOD_CONTROL = 0x0002;
-        private const int MOD_SHIFT = 0x0004;
 
         private const int WM_LBUTTONDOWN = 0x0201;
 
@@ -44,6 +42,7 @@ namespace DropCast
         private LowLevelMouseProc _mouseHookProc;
 
         public event EventHandler DisplayCompleted;
+        public event EventHandler ChangeChannelRequested;
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -176,21 +175,28 @@ namespace DropCast
             _controlPanel.VolumeChanged += (s, vol) => _mediaPlayer.Volume = vol;
             _controlPanel.ClickToDismissChanged += (s, enabled) => _clickToDismissEnabled = enabled;
             _controlPanel.ShowAuthorInfoChanged += (s, enabled) => _showAuthorInfo = enabled;
+            _controlPanel.ChangeChannelRequested += (s, _) => ChangeChannelRequested?.Invoke(this, EventArgs.Empty);
             _controlPanel.Volume = settings.Volume;
             _controlPanel.ClickToDismissEnabled = settings.ClickToDismissEnabled;
             _controlPanel.ShowAuthorInfoEnabled = settings.ShowAuthorInfoEnabled;
             _controlPanel.PositionOnScreen();
 
-            // Global hotkey: Ctrl+Shift+V
-            RegisterHotKey(Handle, HOTKEY_ID_VOLUME, MOD_CONTROL | MOD_SHIFT, (int)Keys.V);
+            // Global hotkey: F10 toggles the control panel
+            RegisterHotKey(Handle, HOTKEY_ID_VOLUME, 0, (int)Keys.F10);
+
+            // Direct click handlers on media controls (fallback for when the low-level hook is silently removed by Windows)
+            videoView.Click += OnMediaClicked;
+            pictureBox.Click += OnMediaClicked;
+            Caption.Click += OnMediaClicked;
 
             // Low-level mouse hook for click-to-dismiss (catches clicks even on VLC DirectX surface)
             _mouseHookProc = MouseHookCallback;
-            using (var curProcess = Process.GetCurrentProcess())
-            using (var curModule = curProcess.MainModule)
-            {
-                _mouseHookHandle = SetWindowsHookEx(WH_MOUSE_LL, _mouseHookProc, GetModuleHandle(curModule.ModuleName), 0);
-            }
+            EnsureMouseHook();
+        }
+
+        public void UpdateChannelInfo(string serverName, string channelName)
+        {
+            _controlPanel?.SetChannelInfo(serverName, channelName);
         }
 
         private void OnDisplayCompleted()
@@ -342,6 +348,7 @@ namespace DropCast
                     ShowAuthorOverlay(videoView);
                     ResumeLayout(true);
                     _mediaActive = true;
+                    EnsureMouseHook();
                 }));
             };
 
@@ -464,6 +471,7 @@ namespace DropCast
 
             ShowAuthorOverlay(Caption);
             _mediaActive = true;
+            EnsureMouseHook();
         }
 
         public void DisplayImage(string imageUrl, string captionText)
@@ -542,6 +550,7 @@ namespace DropCast
                         ResumeLayout(true);
                         pictureBox.Refresh();
                         _mediaActive = true;
+                        EnsureMouseHook();
 
                         Task.Delay(8000, token).ContinueWith(__ =>
                         {
@@ -657,6 +666,31 @@ namespace DropCast
             if (_authorLabel != null) _authorLabel.Visible = false;
         }
 
+        private void OnMediaClicked(object sender, EventArgs e)
+        {
+            if (_clickToDismissEnabled && _mediaActive)
+                DismissCurrentMedia();
+        }
+
+        /// <summary>
+        /// (Re)installs the low-level mouse hook. Windows silently removes
+        /// WH_MOUSE_LL hooks when the callback thread is unresponsive,
+        /// so we re-install every time media starts playing.
+        /// </summary>
+        private void EnsureMouseHook()
+        {
+            if (_mouseHookHandle != IntPtr.Zero)
+            {
+                UnhookWindowsHookEx(_mouseHookHandle);
+                _mouseHookHandle = IntPtr.Zero;
+            }
+            using (var curProcess = Process.GetCurrentProcess())
+            using (var curModule = curProcess.MainModule)
+            {
+                _mouseHookHandle = SetWindowsHookEx(WH_MOUSE_LL, _mouseHookProc, GetModuleHandle(curModule.ModuleName), 0);
+            }
+        }
+
         private void DismissCurrentMedia()
         {
             CancelPreviousMedia();
@@ -665,34 +699,37 @@ namespace DropCast
 
         private IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
-            if (nCode >= 0 && (int)wParam == WM_LBUTTONDOWN && _clickToDismissEnabled && _mediaActive)
+            try
             {
-                var hookStruct = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
-                Point clientPt = PointToClient(hookStruct.pt);
-
-                bool hit = (videoView.Visible && videoView.Bounds.Contains(clientPt)) ||
-                           (pictureBox.Visible && pictureBox.Bounds.Contains(clientPt)) ||
-                           (Caption.Visible && Caption.Bounds.Contains(clientPt)) ||
-                           (_authorAvatar != null && _authorAvatar.Visible && _authorAvatar.Bounds.Contains(clientPt)) ||
-                           (_authorLabel != null && _authorLabel.Visible && _authorLabel.Bounds.Contains(clientPt));
-
-                if (hit)
+                if (nCode >= 0 && (int)wParam == WM_LBUTTONDOWN && _clickToDismissEnabled && _mediaActive)
                 {
-                    BeginInvoke(new Action(DismissCurrentMedia));
-                    return (IntPtr)1;
+                    var hookStruct = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
+                    Point clientPt = PointToClient(hookStruct.pt);
+
+                    bool hit = (videoView.Visible && videoView.Bounds.Contains(clientPt)) ||
+                               (pictureBox.Visible && pictureBox.Bounds.Contains(clientPt)) ||
+                               (Caption.Visible && Caption.Bounds.Contains(clientPt)) ||
+                               (_authorAvatar != null && _authorAvatar.Visible && _authorAvatar.Bounds.Contains(clientPt)) ||
+                               (_authorLabel != null && _authorLabel.Visible && _authorLabel.Bounds.Contains(clientPt));
+
+                    if (hit)
+                    {
+                        BeginInvoke(new Action(DismissCurrentMedia));
+                        return (IntPtr)1;
+                    }
                 }
             }
+            catch { }
             return CallNextHookEx(_mouseHookHandle, nCode, wParam, lParam);
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            new UserSettings
-            {
-                Volume = _controlPanel?.Volume ?? 100,
-                ClickToDismissEnabled = _controlPanel?.ClickToDismissEnabled ?? false,
-                ShowAuthorInfoEnabled = _controlPanel?.ShowAuthorInfoEnabled ?? false
-            }.Save();
+            var settings = UserSettings.Load();
+            settings.Volume = _controlPanel?.Volume ?? 100;
+            settings.ClickToDismissEnabled = _controlPanel?.ClickToDismissEnabled ?? false;
+            settings.ShowAuthorInfoEnabled = _controlPanel?.ShowAuthorInfoEnabled ?? false;
+            settings.Save();
 
             if (_mouseHookHandle != IntPtr.Zero)
                 UnhookWindowsHookEx(_mouseHookHandle);

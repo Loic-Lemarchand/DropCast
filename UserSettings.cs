@@ -26,6 +26,13 @@ namespace DropCast
         public ulong ServerId { get; set; }
         public ulong ChannelId { get; set; }
         public List<ChannelHistoryEntry> ChannelHistory { get; set; } = new List<ChannelHistoryEntry>();
+        public List<ulong> KnownServerIds { get; set; } = new List<ulong>();
+
+        public void AddKnownServer(ulong serverId)
+        {
+            if (serverId != 0 && !KnownServerIds.Contains(serverId))
+                KnownServerIds.Add(serverId);
+        }
 
         public void AddToHistory(ulong serverId, string serverName, ulong channelId, string channelName)
         {
@@ -43,13 +50,30 @@ namespace DropCast
 
         public static UserSettings Load()
         {
+            UserSettings settings;
             try
             {
                 if (File.Exists(SettingsPath))
-                    return JsonConvert.DeserializeObject<UserSettings>(File.ReadAllText(SettingsPath)) ?? new UserSettings();
+                    settings = JsonConvert.DeserializeObject<UserSettings>(File.ReadAllText(SettingsPath)) ?? new UserSettings();
+                else
+                    settings = new UserSettings();
             }
-            catch { }
-            return new UserSettings();
+            catch { settings = new UserSettings(); }
+
+            // Migration: populate KnownServerIds from existing history/selection
+            if (settings.KnownServerIds.Count == 0 && (settings.ServerId != 0 || settings.ChannelHistory.Count > 0))
+            {
+                if (settings.ServerId != 0)
+                    settings.KnownServerIds.Add(settings.ServerId);
+                foreach (var entry in settings.ChannelHistory)
+                {
+                    if (!settings.KnownServerIds.Contains(entry.ServerId))
+                        settings.KnownServerIds.Add(entry.ServerId);
+                }
+                settings.Save();
+            }
+
+            return settings;
         }
 
         public void Save()

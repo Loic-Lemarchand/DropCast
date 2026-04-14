@@ -2,7 +2,7 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="DropCast.Android.OverlayZonePage"
-             BackgroundColor="#1a1a2e"
+             BackgroundColor="#0D2B3E"
              Title="Zone d'affichage"
              Shell.NavBarIsVisible="True">
 
@@ -10,12 +10,12 @@
 
         <VerticalStackLayout Grid.Row="0" Padding="16,16,16,8" Spacing="4">
             <Label Text="Zone d'affichage" FontSize="20" FontAttributes="Bold" TextColor="White" HorizontalOptions="Center"/>
-            <Label Text="Déplacez le rectangle ou tirez les coins" FontSize="13" TextColor="#888" HorizontalOptions="Center"/>
-            <Label x:Name="ZoneSizeLabel" Text="" FontSize="12" TextColor="#6c5ce7" HorizontalOptions="Center"/>
+            <Label Text="Déplacez le rectangle ou tirez les coins" FontSize="13" TextColor="#8BB8C4" HorizontalOptions="Center"/>
+            <Label x:Name="ZoneSizeLabel" Text="" FontSize="12" TextColor="#2ABFBF" HorizontalOptions="Center"/>
         </VerticalStackLayout>
 
         <AbsoluteLayout Grid.Row="1" x:Name="PreviewArea"
-                         BackgroundColor="#1a1a2e"
+                         BackgroundColor="#0D2B3E"
                          SizeChanged="OnAreaSizeChanged">
 
             <!-- Dim overlays (outside zone = dark) -->
@@ -27,7 +27,7 @@
             <!-- Zone body (draggable) -->
             <Border x:Name="ZoneBox"
                     BackgroundColor="Transparent"
-                    Stroke="#6c5ce7"
+                    Stroke="#2ABFBF"
                     StrokeThickness="2.5"
                     StrokeShape="RoundRectangle 6,6,6,6"
                     AbsoluteLayout.LayoutFlags="None">
@@ -37,10 +37,10 @@
             </Border>
 
             <!-- Rule-of-thirds grid lines -->
-            <BoxView x:Name="GridH1" Color="#306c5ce7" InputTransparent="True" AbsoluteLayout.LayoutFlags="None"/>
-            <BoxView x:Name="GridH2" Color="#306c5ce7" InputTransparent="True" AbsoluteLayout.LayoutFlags="None"/>
-            <BoxView x:Name="GridV1" Color="#306c5ce7" InputTransparent="True" AbsoluteLayout.LayoutFlags="None"/>
-            <BoxView x:Name="GridV2" Color="#306c5ce7" InputTransparent="True" AbsoluteLayout.LayoutFlags="None"/>
+            <BoxView x:Name="GridH1" Color="#302ABFBF" InputTransparent="True" AbsoluteLayout.LayoutFlags="None"/>
+            <BoxView x:Name="GridH2" Color="#302ABFBF" InputTransparent="True" AbsoluteLayout.LayoutFlags="None"/>
+            <BoxView x:Name="GridV1" Color="#302ABFBF" InputTransparent="True" AbsoluteLayout.LayoutFlags="None"/>
+            <BoxView x:Name="GridV2" Color="#302ABFBF" InputTransparent="True" AbsoluteLayout.LayoutFlags="None"/>
 
             <!-- Corner handles -->
             <BoxView x:Name="HandleTL" Color="White" CornerRadius="22"
@@ -87,10 +87,10 @@
         </AbsoluteLayout>
 
         <HorizontalStackLayout Grid.Row="2" HorizontalOptions="Center" Spacing="16" Padding="16,12">
-            <Button Text="Plein écran" BackgroundColor="#2d3436" TextColor="#ddd"
-                    FontSize="14" CornerRadius="8" Clicked="OnResetClicked"/>
-            <Button Text="Sauvegarder" BackgroundColor="#6c5ce7" TextColor="White"
-                    FontSize="14" CornerRadius="8" Clicked="OnSaveClicked"/>
+            <Button Text="Plein écran" BackgroundColor="#143D54" TextColor="#8BB8C4"
+                    FontSize="14" FontAttributes="Bold" CornerRadius="10" Clicked="OnResetClicked" BorderColor="#1E4A5F" BorderWidth="1" />
+            <Button Text="Sauvegarder" BackgroundColor="#2ABFBF" TextColor="White"
+                    FontSize="14" FontAttributes="Bold" CornerRadius="10" Clicked="OnSaveClicked"/>
         </HorizontalStackLayout>
 
     </Grid>

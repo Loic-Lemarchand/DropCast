@@ -8,6 +8,7 @@ public static class AppSettings
 {
     private const string ChannelKey = "discord_channel_id";
     private const string HistoryKey = "channel_history_json";
+    private const string KnownServersKey = "known_server_ids_json";
 
     public static ulong ChannelId
     {
@@ -54,6 +55,13 @@ public static class AppSettings
         set => Preferences.Default.Set("overlay_zone_height", value);
     }
 
+    /// <summary>Background opacity of the overlay (0 = fully transparent, 100 = fully opaque). Default 80.</summary>
+    public static int OverlayBackgroundOpacity
+    {
+        get => Preferences.Default.Get("overlay_bg_opacity", 80);
+        set => Preferences.Default.Set("overlay_bg_opacity", Math.Clamp(value, 0, 100));
+    }
+
     public static List<ChannelHistoryEntry> GetChannelHistory()
     {
         string json = Preferences.Default.Get(HistoryKey, "");
@@ -69,5 +77,45 @@ public static class AppSettings
         history.Insert(0, new ChannelHistoryEntry(serverId, serverName, channelId, channelName));
         if (history.Count > 10) history = history.GetRange(0, 10);
         Preferences.Default.Set(HistoryKey, JsonSerializer.Serialize(history));
+    }
+
+    public static List<ulong> GetKnownServerIds()
+    {
+        string json = Preferences.Default.Get(KnownServersKey, "");
+        if (string.IsNullOrEmpty(json)) return [];
+        try { return JsonSerializer.Deserialize<List<ulong>>(json) ?? []; }
+        catch { return []; }
+    }
+
+    public static void AddKnownServer(ulong serverId)
+    {
+        if (serverId == 0) return;
+        var ids = GetKnownServerIds();
+        if (!ids.Contains(serverId))
+        {
+            ids.Add(serverId);
+            Preferences.Default.Set(KnownServersKey, JsonSerializer.Serialize(ids));
+        }
+    }
+
+    /// <summary>
+    /// One-time migration: populate KnownServerIds from existing history/selection for users updating from older versions.
+    /// </summary>
+    public static void MigrateKnownServers()
+    {
+        if (GetKnownServerIds().Count > 0) return;
+
+        var ids = new List<ulong>();
+        if (ServerId != 0)
+            ids.Add(ServerId);
+
+        foreach (var entry in GetChannelHistory())
+        {
+            if (!ids.Contains(entry.ServerId))
+                ids.Add(entry.ServerId);
+        }
+
+        if (ids.Count > 0)
+            Preferences.Default.Set(KnownServersKey, JsonSerializer.Serialize(ids));
     }
 }

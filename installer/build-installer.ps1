@@ -84,6 +84,21 @@ if (-not (Test-Path $exe)) {
     Write-Error "bin\Release\DropCast.exe not found. Build may have failed."
 }
 
+# --- Bundle token.enc ---
+$releaseToken = Join-Path $Root "bin\Release\token.enc"
+if (-not (Test-Path $releaseToken)) {
+    # Copy from the Android project's bundled token (canonical source)
+    $androidToken = Join-Path $Root "DropCast.Android\Resources\Raw\token.enc"
+    if (Test-Path $androidToken) {
+        Copy-Item -Path $androidToken -Destination $releaseToken -Force
+        Write-Host "Bundled token.enc from Android resources" -ForegroundColor Green
+    } else {
+        Write-Host "WARNING: token.enc not found — installer will not include a bundled token" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "token.enc already in build output" -ForegroundColor DarkGray
+}
+
 # --- Compile installer ---
 Write-Host "`n--- Compiling installer ---" -ForegroundColor Cyan
 $issFile = Join-Path $Root "installer\DropCast.iss"

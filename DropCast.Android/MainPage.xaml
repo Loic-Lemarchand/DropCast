@@ -2,61 +2,81 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="DropCast.Android.MainPage"
-             BackgroundColor="#1a1a2e"
+             BackgroundColor="#0D2B3E"
              Title="DropCast">
 
     <ScrollView Padding="24">
         <VerticalStackLayout Spacing="16">
-            <Label Text="DropCast" FontSize="32" FontAttributes="Bold" TextColor="White" HorizontalOptions="Center" />
-            <Label Text="Recois tes memes en overlay" FontSize="14" TextColor="#888" HorizontalOptions="Center" />
+
+            <!-- Header -->
+            <Image Source="appicon.png" HeightRequest="56" WidthRequest="56" HorizontalOptions="Center" Margin="0,8,0,0" />
+            <Label Text="DropCast" FontSize="28" FontAttributes="Bold" TextColor="White" HorizontalOptions="Center" />
+            <Label Text="Reçois tes memes en overlay" FontSize="13" TextColor="#8BB8C4" HorizontalOptions="Center" Margin="0,0,0,4" />
 
             <!-- Discord Section -->
-            <BoxView HeightRequest="1" Color="#333" Margin="0,8" />
-            <Label x:Name="BotStatusLabel" Text="" TextColor="#888" FontSize="12" />
+            <BoxView HeightRequest="1" Color="#1E4A5F" Margin="0,8" />
+            <Label x:Name="BotStatusLabel" Text="" TextColor="#8BB8C4" FontSize="12" />
 
             <!-- Token entry (hidden by default, shown only as fallback) -->
             <VerticalStackLayout x:Name="TokenSection" Spacing="8" IsVisible="False">
-                <Label Text="Discord" FontSize="18" FontAttributes="Bold" TextColor="#6c5ce7" />
-                <Label Text="Bot Token" TextColor="#aaa" FontSize="13" />
-                <Entry x:Name="TokenEntry" Placeholder="Colle ton token Discord ici" PlaceholderColor="#555" TextColor="White" BackgroundColor="#2a2a4a" IsPassword="True" FontSize="14" />
-                <Button x:Name="ConnectBotButton" Text="Connecter le bot" BackgroundColor="#6c5ce7" TextColor="White" FontSize="14" CornerRadius="8" Clicked="OnConnectBotClicked" />
+                <Label Text="Discord" FontSize="18" FontAttributes="Bold" TextColor="#2ABFBF" />
+                <Label Text="BOT TOKEN" TextColor="#8BB8C4" FontSize="11" FontAttributes="Bold" />
+                <Border Stroke="#1E4A5F" StrokeThickness="1" StrokeShape="RoundRectangle 8" BackgroundColor="#143D54" Padding="0">
+                    <Entry x:Name="TokenEntry" Placeholder="Colle ton token Discord ici" PlaceholderColor="#4A7A8A" TextColor="White" BackgroundColor="Transparent" IsPassword="True" FontSize="14" />
+                </Border>
+                <Button x:Name="ConnectBotButton" Text="Connecter le bot" BackgroundColor="#2ABFBF" TextColor="White" FontSize="14" FontAttributes="Bold" CornerRadius="10" Clicked="OnConnectBotClicked" HeightRequest="44" />
             </VerticalStackLayout>
 
             <!-- Server/Channel pickers (hidden until bot connects) -->
             <VerticalStackLayout x:Name="ChannelPickerSection" IsVisible="False" Spacing="10">
                 <!-- Recent channels -->
-                <Label x:Name="RecentLabel" Text="Canaux récents" TextColor="#aaa" FontSize="13" FontAttributes="Bold" IsVisible="False" />
-                <Picker x:Name="RecentPicker" Title="Sélectionner un canal récent" TextColor="White" TitleColor="#555" BackgroundColor="#2a2a4a"
-                        SelectedIndexChanged="OnRecentChannelChanged" IsVisible="False" />
+                <Label x:Name="RecentLabel" Text="CANAUX RÉCENTS" TextColor="#2ABFBF" FontSize="11" FontAttributes="Bold" IsVisible="False" />
+                <Border x:Name="RecentBorder" Stroke="#1E4A5F" StrokeThickness="1" StrokeShape="RoundRectangle 8" BackgroundColor="#143D54" Padding="0" IsVisible="False">
+                    <Picker x:Name="RecentPicker" Title="Sélectionner un canal récent" TextColor="White" TitleColor="#4A7A8A" BackgroundColor="Transparent"
+                            SelectedIndexChanged="OnRecentChannelChanged" />
+                </Border>
 
-                <Label Text="── ou sélectionnez ──" TextColor="#555" FontSize="11" HorizontalOptions="Center" />
+                <Label Text="── ou sélectionnez ──" TextColor="#4A7A8A" FontSize="11" HorizontalOptions="Center" />
 
                 <!-- Manual selection -->
-                <Label Text="Serveur" TextColor="#aaa" FontSize="13" />
-                <Picker x:Name="ServerPicker" Title="Choisir un serveur" TextColor="White" TitleColor="#555" BackgroundColor="#2a2a4a"
-                        SelectedIndexChanged="OnServerChanged" />
-                <Label Text="Salon" TextColor="#aaa" FontSize="13" />
-                <Picker x:Name="ChannelPicker" Title="Choisir un salon" TextColor="White" TitleColor="#555" BackgroundColor="#2a2a4a"
-                        SelectedIndexChanged="OnChannelChanged" />
+                <Label Text="SERVEUR" TextColor="#8BB8C4" FontSize="11" FontAttributes="Bold" />
+                <Border Stroke="#1E4A5F" StrokeThickness="1" StrokeShape="RoundRectangle 8" BackgroundColor="#143D54" Padding="0">
+                    <Picker x:Name="ServerPicker" Title="Choisir un serveur" TextColor="White" TitleColor="#4A7A8A" BackgroundColor="Transparent"
+                            SelectedIndexChanged="OnServerChanged" />
+                </Border>
+                <Label Text="SALON" TextColor="#8BB8C4" FontSize="11" FontAttributes="Bold" />
+                <Border Stroke="#1E4A5F" StrokeThickness="1" StrokeShape="RoundRectangle 8" BackgroundColor="#143D54" Padding="0">
+                    <Picker x:Name="ChannelPicker" Title="Choisir un salon" TextColor="White" TitleColor="#4A7A8A" BackgroundColor="Transparent"
+                            SelectedIndexChanged="OnChannelChanged" />
+                </Border>
 
                 <!-- Add server by invite -->
-                <BoxView HeightRequest="1" Color="#333" Margin="0,4" />
-                <Label Text="Ajouter un serveur" TextColor="#aaa" FontSize="13" FontAttributes="Bold" />
-                <Entry x:Name="InviteEntry" Placeholder="https://discord.gg/..." PlaceholderColor="#555" TextColor="White" BackgroundColor="#2a2a4a" FontSize="14" />
-                <Button x:Name="AddServerButton" Text="Ajouter le bot au serveur" BackgroundColor="#2d3436" TextColor="#ddd" FontSize="13" CornerRadius="8" Clicked="OnAddServerClicked" />
-                <Label x:Name="InviteStatusLabel" Text="" TextColor="#888" FontSize="12" />
+                <BoxView HeightRequest="1" Color="#1E4A5F" Margin="0,4" />
+                <Label Text="AJOUTER UN SERVEUR" TextColor="#2ABFBF" FontSize="11" FontAttributes="Bold" />
+                <Border Stroke="#1E4A5F" StrokeThickness="1" StrokeShape="RoundRectangle 8" BackgroundColor="#143D54" Padding="0">
+                    <Entry x:Name="InviteEntry" Placeholder="https://discord.gg/..." PlaceholderColor="#4A7A8A" TextColor="White" BackgroundColor="Transparent" FontSize="14" />
+                </Border>
+                <Button x:Name="AddServerButton" Text="Ajouter le bot au serveur" BackgroundColor="#143D54" TextColor="#8BB8C4" FontSize="13" FontAttributes="Bold" CornerRadius="10" Clicked="OnAddServerClicked" HeightRequest="42" BorderColor="#1E4A5F" BorderWidth="1" />
+                <Label x:Name="InviteStatusLabel" Text="" TextColor="#8BB8C4" FontSize="12" />
             </VerticalStackLayout>
 
             <!-- Overlay Zone -->
-            <BoxView HeightRequest="1" Color="#333" Margin="0,8" />
-            <Button Text="📐 Configurer la zone d'affichage" BackgroundColor="#2d3436" TextColor="#ddd" FontSize="13" CornerRadius="8" Clicked="OnZoneConfigClicked" />
+            <BoxView HeightRequest="1" Color="#1E4A5F" Margin="0,8" />
+            <Button Text="📐 Configurer la zone d'affichage" BackgroundColor="#143D54" TextColor="#8BB8C4" FontSize="13" FontAttributes="Bold" CornerRadius="10" Clicked="OnZoneConfigClicked" HeightRequest="42" BorderColor="#1E4A5F" BorderWidth="1" />
+
+            <!-- Overlay background opacity -->
+            <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                <Label Text="Opacité du fond" TextColor="#8BB8C4" FontSize="13" VerticalOptions="Center" />
+                <Label x:Name="OpacityValueLabel" Text="80 %" TextColor="White" FontSize="13" FontAttributes="Bold" VerticalOptions="Center" Grid.Column="1" />
+            </Grid>
+            <Slider x:Name="OpacitySlider" Minimum="0" Maximum="100" MinimumTrackColor="#2ABFBF" MaximumTrackColor="#1E4A5F" ThumbColor="#48D1CC" ValueChanged="OnOpacityChanged" />
 
             <!-- Controls -->
-            <BoxView HeightRequest="1" Color="#333" Margin="0,8" />
-            <Label x:Name="StatusLabel" Text="Deconnecte" TextColor="#888" FontSize="15" HorizontalOptions="Center" />
-            <Button x:Name="StartButton" Text="Demarrer overlay" BackgroundColor="#6c5ce7" TextColor="White" FontSize="16" CornerRadius="12" Clicked="OnStartClicked" />
-            <Button x:Name="StopButton" Text="Arreter" BackgroundColor="#d63031" TextColor="White" FontSize="16" CornerRadius="12" IsVisible="False" Clicked="OnStopClicked" />
-            <Button Text="Permission overlay" BackgroundColor="#2d3436" TextColor="#ddd" FontSize="13" CornerRadius="8" Clicked="OnOverlayPermissionClicked" />
+            <BoxView HeightRequest="1" Color="#1E4A5F" Margin="0,8" />
+            <Label x:Name="StatusLabel" Text="Déconnecté" TextColor="#8BB8C4" FontSize="15" HorizontalOptions="Center" />
+            <Button x:Name="StartButton" Text="Démarrer overlay" BackgroundColor="#2ABFBF" TextColor="White" FontSize="16" FontAttributes="Bold" CornerRadius="12" Clicked="OnStartClicked" HeightRequest="48" />
+            <Button x:Name="StopButton" Text="Arrêter" BackgroundColor="#E74C3C" TextColor="White" FontSize="16" FontAttributes="Bold" CornerRadius="12" IsVisible="False" Clicked="OnStopClicked" HeightRequest="48" />
+            <Button Text="Permission overlay" BackgroundColor="#143D54" TextColor="#8BB8C4" FontSize="13" FontAttributes="Bold" CornerRadius="10" Clicked="OnOverlayPermissionClicked" HeightRequest="42" BorderColor="#1E4A5F" BorderWidth="1" />
         </VerticalStackLayout>
     </ScrollView>
 </ContentPage>

@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.Windows.Forms;
 
@@ -10,6 +11,14 @@ namespace DropCast
     /// </summary>
     public class DropCaptionDialog : Form
     {
+        // ── Palette ──
+        private static readonly Color BgDark = Color.FromArgb(13, 43, 62);
+        private static readonly Color BgCard = Color.FromArgb(20, 61, 84);
+        private static readonly Color Accent = Color.FromArgb(42, 191, 191);
+        private static readonly Color TextPrimary = Color.White;
+        private static readonly Color TextSecondary = Color.FromArgb(139, 184, 196);
+        private static readonly Color InputBg = Color.FromArgb(26, 58, 80);
+
         private TextBox _captionBox;
         private TextBox _trimStartBox;
         private TextBox _trimEndBox;
@@ -27,22 +36,24 @@ namespace DropCast
             MaximizeBox = false;
             MinimizeBox = false;
             TopMost = true;
-            BackColor = Color.FromArgb(30, 30, 30);
-            ForeColor = Color.White;
+            BackColor = BgDark;
+            ForeColor = TextPrimary;
+            Font = new Font("Segoe UI", 9.5F);
 
             var fileLabel = new Label
             {
                 Text = "📂  " + Path.GetFileName(filePath),
                 Font = new Font("Segoe UI", 10F, FontStyle.Bold),
-                ForeColor = Color.FromArgb(200, 200, 200),
+                ForeColor = Accent,
                 AutoSize = true,
                 Location = new Point(20, 15)
             };
 
             var captionLabel = new Label
             {
-                Text = "Caption :",
-                Font = new Font("Segoe UI", 9F),
+                Text = "CAPTION",
+                Font = new Font("Segoe UI", 8F, FontStyle.Bold),
+                ForeColor = TextSecondary,
                 AutoSize = true,
                 Location = new Point(20, 50)
             };
@@ -52,15 +63,16 @@ namespace DropCast
                 Location = new Point(20, 72),
                 Size = new Size(360, 24),
                 Font = new Font("Segoe UI", 10F),
-                BackColor = Color.FromArgb(50, 50, 50),
-                ForeColor = Color.White
+                BackColor = InputBg,
+                ForeColor = TextPrimary,
+                BorderStyle = BorderStyle.FixedSingle
             };
 
             var trimLabel = new Label
             {
-                Text = "Trim (optionnel) :",
-                Font = new Font("Segoe UI", 9F),
-                ForeColor = Color.FromArgb(160, 160, 160),
+                Text = "TRIM (OPTIONNEL)",
+                Font = new Font("Segoe UI", 8F, FontStyle.Bold),
+                ForeColor = TextSecondary,
                 AutoSize = true,
                 Location = new Point(20, 110)
             };
@@ -69,6 +81,7 @@ namespace DropCast
             {
                 Text = "Début (s) :",
                 Font = new Font("Segoe UI", 9F),
+                ForeColor = TextSecondary,
                 AutoSize = true,
                 Location = new Point(20, 136)
             };
@@ -78,14 +91,16 @@ namespace DropCast
                 Location = new Point(100, 133),
                 Size = new Size(80, 24),
                 Font = new Font("Segoe UI", 10F),
-                BackColor = Color.FromArgb(50, 50, 50),
-                ForeColor = Color.White
+                BackColor = InputBg,
+                ForeColor = TextPrimary,
+                BorderStyle = BorderStyle.FixedSingle
             };
 
             var trimEndLabel = new Label
             {
                 Text = "Fin (s) :",
                 Font = new Font("Segoe UI", 9F),
+                ForeColor = TextSecondary,
                 AutoSize = true,
                 Location = new Point(210, 136)
             };
@@ -95,8 +110,9 @@ namespace DropCast
                 Location = new Point(270, 133),
                 Size = new Size(80, 24),
                 Font = new Font("Segoe UI", 10F),
-                BackColor = Color.FromArgb(50, 50, 50),
-                ForeColor = Color.White
+                BackColor = InputBg,
+                ForeColor = TextPrimary,
+                BorderStyle = BorderStyle.FixedSingle
             };
 
             var validateButton = new Button
@@ -106,8 +122,9 @@ namespace DropCast
                 Location = new Point(130, 180),
                 Size = new Size(150, 36),
                 FlatStyle = FlatStyle.Flat,
-                BackColor = Color.FromArgb(60, 120, 200),
+                BackColor = Accent,
                 ForeColor = Color.White,
+                Cursor = Cursors.Hand,
                 DialogResult = DialogResult.None
             };
             validateButton.FlatAppearance.BorderSize = 0;

@@ -49,13 +49,7 @@ namespace DropCast
             NLog.LogManager.Configuration = config;
 
             desktopWindow.Load += async (sender, e) => await StartPipeline(desktopWindow);
-            desktopWindow.KeyDown += (sender, e) =>
-            {
-                if (e.KeyCode == Keys.F10)
-                {
-                    OpenChannelPickerForm();
-                }
-            };
+            desktopWindow.ChangeChannelRequested += (sender, e) => OpenChannelPickerForm();
 
             Application.Run(desktopWindow);
         }
@@ -94,26 +88,38 @@ namespace DropCast
             _pipeline = _services.GetService<MessagePipeline>();
             _pipeline.RegisterSource(_discordSource);
 
-            var localDropSource = new LocalDropMessageSource();
+            var localDropSource = new LocalDropMessageSource(_discordSource);
             _pipeline.RegisterSource(localDropSource);
 
             await _pipeline.ConnectAllAsync();
+
+            // Show current channel in the control panel
+            var currentEntry = _settings.ChannelHistory.Find(h => h.ChannelId == _settings.ChannelId);
+            if (currentEntry != null)
+                _desktopWindow?.UpdateChannelInfo(currentEntry.ServerName, currentEntry.ChannelName);
         }
 
         static void OpenChannelPickerForm()
         {
             if (_discordSource == null) return;
 
-            using (var picker = new ChannelPickerForm(_discordSource, _settings.ServerId, _settings.ChannelId, _settings.ChannelHistory))
+            using (var picker = new ChannelPickerForm(_discordSource, _settings.ServerId, _settings.ChannelId, _settings.ChannelHistory, _settings.KnownServerIds))
             {
-                if (picker.ShowDialog() == DialogResult.OK)
+                var result = picker.ShowDialog();
+
+                // Save known servers even if the user cancelled (they may have added a server via invite)
+                _settings.Save();
+
+                if (result == DialogResult.OK)
                 {
                     _settings.ServerId = picker.SelectedServerId;
                     _settings.ChannelId = picker.SelectedChannelId;
+                    _settings.AddKnownServer(picker.SelectedServerId);
                     _settings.AddToHistory(picker.SelectedServerId, picker.SelectedServerName,
                         picker.SelectedChannelId, picker.SelectedChannelName);
                     _settings.Save();
                     _discordSource.SetChannelId(picker.SelectedChannelId);
+                    _desktopWindow?.UpdateChannelInfo(picker.SelectedServerName, picker.SelectedChannelName);
                 }
             }
         }

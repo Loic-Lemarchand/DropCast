@@ -211,7 +211,8 @@ public class OverlayService : Service
         int dip60 = (int)TypedValue.ApplyDimension(ComplexUnitType.Dip, 60, dm);
 
         _container = new FrameLayout(context);
-        _container.SetBackgroundColor(Color.ParseColor("#CC000000"));
+        int alpha = (int)(AppSettings.OverlayBackgroundOpacity / 100.0 * 255);
+        _container.SetBackgroundColor(new Color(0, 0, 0, alpha));
         _container.Clickable = true;
         _container.Click += (s, e) => DismissOverlay();
 
@@ -264,6 +265,10 @@ public class OverlayService : Service
     {
         if (_windowManager == null || _overlayView == null) return;
         if (_overlayView.Parent != null) return;
+
+        // Refresh background opacity from settings each time the overlay is shown
+        int alpha = (int)(AppSettings.OverlayBackgroundOpacity / 100.0 * 255);
+        _container!.SetBackgroundColor(new Color(0, 0, 0, alpha));
 
         float zoneLeft = AppSettings.OverlayZoneLeft;
         float zoneTop = AppSettings.OverlayZoneTop;

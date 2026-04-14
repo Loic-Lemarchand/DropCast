@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using DropCast.Sources;
 
@@ -9,6 +10,16 @@ namespace DropCast
 {
     public class ChannelPickerForm : Form
     {
+        // ── Palette ──
+        private static readonly Color BgDark = Color.FromArgb(13, 43, 62);
+        private static readonly Color BgCard = Color.FromArgb(20, 61, 84);
+        private static readonly Color Accent = Color.FromArgb(42, 191, 191);
+        private static readonly Color AccentLight = Color.FromArgb(72, 209, 204);
+        private static readonly Color TextPrimary = Color.White;
+        private static readonly Color TextSecondary = Color.FromArgb(139, 184, 196);
+        private static readonly Color InputBg = Color.FromArgb(26, 58, 80);
+        private static readonly Color Border = Color.FromArgb(30, 74, 95);
+
         private readonly DiscordMessageSource _source;
         private ListBox _historyList;
         private ComboBox _serverCombo;
@@ -18,140 +29,205 @@ namespace DropCast
         private Button _confirmButton;
         private Label _statusLabel;
         private ulong _preselectedChannelId;
+        private readonly List<ulong> _knownServerIds;
 
         public ulong SelectedServerId { get; private set; }
         public string SelectedServerName { get; private set; }
         public ulong SelectedChannelId { get; private set; }
         public string SelectedChannelName { get; private set; }
 
-        public ChannelPickerForm(DiscordMessageSource source, ulong currentServerId, ulong currentChannelId, List<ChannelHistoryEntry> history)
+        public ChannelPickerForm(DiscordMessageSource source, ulong currentServerId, ulong currentChannelId, List<ChannelHistoryEntry> history, List<ulong> knownServerIds)
         {
             _source = source;
+            _knownServerIds = knownServerIds;
             _preselectedChannelId = currentChannelId;
             BuildLayout(history ?? new List<ChannelHistoryEntry>());
             PopulateServers(currentServerId);
         }
 
+        private static Button MakeButton(string text, Color bg, int left, int top, int w, int h)
+        {
+            var btn = new Button
+            {
+                Text = text,
+                Left = left, Top = top, Width = w, Height = h,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = bg,
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            };
+            btn.FlatAppearance.BorderSize = 0;
+            btn.FlatAppearance.MouseOverBackColor = ControlPaint.Light(bg, 0.15F);
+            return btn;
+        }
+
+        private static Label MakeSection(string text, int left, int top, int w)
+        {
+            return new Label
+            {
+                Text = text,
+                Left = left, Top = top, Width = w,
+                ForeColor = TextSecondary,
+                Font = new Font("Segoe UI", 8.5F),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Height = 18
+            };
+        }
+
         private void BuildLayout(List<ChannelHistoryEntry> history)
         {
-            Text = "📡 Sélection du canal Discord";
+            Text = "DropCast — Sélection du canal";
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
+            BackColor = BgDark;
+            ForeColor = TextPrimary;
+            Font = new Font("Segoe UI", 9.5F);
 
-            int y = 14;
-            int left = 20;
+            int y = 20;
+            int left = 24;
             int w = 340;
+
+            // ── Title ──
+            Controls.Add(new Label
+            {
+                Text = "📡  Sélection du canal",
+                Left = left, Top = y, AutoSize = true,
+                Font = new Font("Segoe UI", 14F, FontStyle.Bold),
+                ForeColor = TextPrimary
+            });
+            y += 36;
 
             // --- Recent channels ---
             if (history.Count > 0)
             {
                 Controls.Add(new Label
                 {
-                    Text = "Canaux récents (double-clic pour sélectionner) :",
+                    Text = "CANAUX RÉCENTS",
                     Left = left, Top = y, AutoSize = true,
-                    Font = new Font(Font, FontStyle.Bold)
+                    Font = new Font("Segoe UI", 8F, FontStyle.Bold),
+                    ForeColor = Accent
                 });
-                y += 22;
+                y += 20;
 
                 _historyList = new ListBox
                 {
                     Left = left, Top = y,
-                    Width = w, Height = Math.Min(history.Count * 18 + 4, 90),
-                    IntegralHeight = false
+                    Width = w, Height = Math.Min(history.Count * 22 + 4, 92),
+                    IntegralHeight = false,
+                    BackColor = InputBg,
+                    ForeColor = TextPrimary,
+                    Font = new Font("Segoe UI", 9.5F),
+                    BorderStyle = BorderStyle.None
                 };
                 foreach (var entry in history)
                     _historyList.Items.Add(new HistoryItem(entry));
                 _historyList.DoubleClick += OnHistoryDoubleClick;
                 Controls.Add(_historyList);
-                y += _historyList.Height + 10;
+                y += _historyList.Height + 14;
             }
 
             // --- Manual selection ---
+            Controls.Add(MakeSection("── Sélection manuelle ──", left, y, w));
+            y += 26;
+
             Controls.Add(new Label
             {
-                Text = "── Sélection manuelle ──",
-                Left = left, Top = y, Width = w,
-                ForeColor = Color.Gray,
-                TextAlign = ContentAlignment.MiddleCenter
+                Text = "SERVEUR",
+                Left = left, Top = y, AutoSize = true,
+                Font = new Font("Segoe UI", 8F, FontStyle.Bold),
+                ForeColor = TextSecondary
             });
-            y += 24;
-
-            Controls.Add(new Label { Text = "Serveur :", Left = left, Top = y, AutoSize = true });
             y += 18;
 
             _serverCombo = new ComboBox
             {
                 Left = left, Top = y, Width = w,
-                DropDownStyle = ComboBoxStyle.DropDownList
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                BackColor = InputBg,
+                ForeColor = TextPrimary,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 9.5F)
             };
             _serverCombo.SelectedIndexChanged += OnServerChanged;
             Controls.Add(_serverCombo);
-            y += 30;
+            y += 32;
 
-            Controls.Add(new Label { Text = "Canal :", Left = left, Top = y, AutoSize = true });
+            Controls.Add(new Label
+            {
+                Text = "CANAL",
+                Left = left, Top = y, AutoSize = true,
+                Font = new Font("Segoe UI", 8F, FontStyle.Bold),
+                ForeColor = TextSecondary
+            });
             y += 18;
 
             _channelCombo = new ComboBox
             {
                 Left = left, Top = y, Width = w,
-                DropDownStyle = ComboBoxStyle.DropDownList
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                BackColor = InputBg,
+                ForeColor = TextPrimary,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 9.5F)
             };
             Controls.Add(_channelCombo);
-            y += 34;
+            y += 36;
 
             // --- Add server ---
+            Controls.Add(MakeSection("── Ajouter un serveur ──", left, y, w));
+            y += 26;
+
             Controls.Add(new Label
             {
-                Text = "── Ajouter un serveur ──",
-                Left = left, Top = y, Width = w,
-                ForeColor = Color.Gray,
-                TextAlign = ContentAlignment.MiddleCenter
+                Text = "LIEN D'INVITATION",
+                Left = left, Top = y, AutoSize = true,
+                Font = new Font("Segoe UI", 8F, FontStyle.Bold),
+                ForeColor = TextSecondary
             });
-            y += 24;
-
-            Controls.Add(new Label { Text = "Lien d'invitation Discord :", Left = left, Top = y, AutoSize = true });
             y += 18;
 
-            _inviteBox = new TextBox { Left = left, Top = y, Width = w };
-            Controls.Add(_inviteBox);
-            y += 28;
-
-            _addServerButton = new Button
+            _inviteBox = new TextBox
             {
-                Text = "Ajouter le bot au serveur",
-                Left = left, Top = y, Width = w, Height = 28
+                Left = left, Top = y, Width = w,
+                BackColor = InputBg,
+                ForeColor = TextPrimary,
+                Font = new Font("Segoe UI", 9.5F),
+                BorderStyle = BorderStyle.FixedSingle
             };
+            Controls.Add(_inviteBox);
+            y += 30;
+
+            _addServerButton = MakeButton("Ajouter le bot au serveur", BgCard, left, y, w, 32);
             _addServerButton.Click += OnAddServerClicked;
             Controls.Add(_addServerButton);
-            y += 34;
+            y += 38;
 
             _statusLabel = new Label
             {
                 Text = "", Left = left, Top = y, Width = w,
-                ForeColor = Color.Gray, Height = 18
+                ForeColor = TextSecondary, Height = 18,
+                Font = new Font("Segoe UI", 8.5F)
             };
             Controls.Add(_statusLabel);
             y += 24;
 
             // --- Validate ---
-            _confirmButton = new Button
-            {
-                Text = "Valider",
-                Left = (380 - 120) / 2, Top = y,
-                Width = 120, Height = 32
-            };
+            _confirmButton = MakeButton("Valider", Accent, (388 - 160) / 2, y, 160, 36);
             _confirmButton.Click += OnConfirmClicked;
             Controls.Add(_confirmButton);
 
-            ClientSize = new Size(380, y + 46);
+            ClientSize = new Size(388, y + 52);
         }
 
         private void PopulateServers(ulong preselectedServerId)
         {
-            var guilds = _source.GetGuilds();
+            var allGuilds = _source.GetGuilds();
+            var knownSet = new HashSet<ulong>(_knownServerIds);
+            var guilds = allGuilds.FindAll(g => knownSet.Contains(g.Id));
             _serverCombo.Items.Clear();
 
             foreach (var g in guilds)
@@ -241,6 +317,8 @@ namespace DropCast
                 {
                     _statusLabel.Text = "✅ Déjà dans « " + info.GuildName + " ».";
                     _statusLabel.ForeColor = Color.Green;
+                    if (!_knownServerIds.Contains(info.GuildId))
+                        _knownServerIds.Add(info.GuildId);
                     PopulateServers(info.GuildId);
                     return;
                 }
@@ -254,6 +332,8 @@ namespace DropCast
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
 
+                if (!_knownServerIds.Contains(info.GuildId))
+                    _knownServerIds.Add(info.GuildId);
                 PopulateServers(info.GuildId);
 
                 if (_source.IsInGuild(info.GuildId))

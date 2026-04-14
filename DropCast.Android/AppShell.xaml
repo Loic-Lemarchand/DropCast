@@ -5,7 +5,12 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
     xmlns:local="clr-namespace:DropCast.Android"
     Title="DropCast"
-    Shell.FlyoutBehavior="Disabled">
+    Shell.FlyoutBehavior="Disabled"
+    Shell.BackgroundColor="#0D2B3E"
+    Shell.ForegroundColor="White"
+    Shell.TitleColor="White"
+    Shell.UnselectedColor="#8BB8C4"
+    Shell.NavBarHasShadow="False">
 
     <ShellContent
         Title="DropCast"

@@ -21,6 +21,9 @@ public partial class MainPage : ContentPage
 		_discord = discord;
 		_resolver = resolver;
 		_overlayLogger = overlayLogger;
+
+		OpacitySlider.Value = AppSettings.OverlayBackgroundOpacity;
+		OpacityValueLabel.Text = $"{AppSettings.OverlayBackgroundOpacity} %";
 	}
 
 	protected override async void OnAppearing()
@@ -52,10 +55,10 @@ public partial class MainPage : ContentPage
 		{
 			await _discord.ConnectAsync(token);
 
-			_guilds = _discord.GetGuilds();
-			ServerPicker.Items.Clear();
-			foreach (var g in _guilds)
-				ServerPicker.Items.Add(g.Name);
+			// Migrate known servers from channel history for users updating from older versions
+			AppSettings.MigrateKnownServers();
+
+			PopulateFilteredGuilds();
 
 			ChannelPickerSection.IsVisible = true;
 			BotStatusLabel.Text = $"✅ Connecté — {_guilds.Count} serveur(s)";
@@ -91,10 +94,10 @@ public partial class MainPage : ContentPage
 			await _discord.ConnectAsync(token);
 			TokenProvider.SaveEncrypted(token, TokenProvider.GetTokenFilePath());
 
-			_guilds = _discord.GetGuilds();
-			ServerPicker.Items.Clear();
-			foreach (var g in _guilds)
-				ServerPicker.Items.Add(g.Name);
+			// Migrate known servers from channel history for users updating from older versions
+			AppSettings.MigrateKnownServers();
+
+			PopulateFilteredGuilds();
 
 			ChannelPickerSection.IsVisible = true;
 			TokenSection.IsVisible = false;
@@ -176,12 +179,12 @@ public partial class MainPage : ContentPage
 		if (_recentEntries.Count == 0)
 		{
 			RecentLabel.IsVisible = false;
-			RecentPicker.IsVisible = false;
+			RecentBorder.IsVisible = false;
 			return;
 		}
 
 		RecentLabel.IsVisible = true;
-		RecentPicker.IsVisible = true;
+		RecentBorder.IsVisible = true;
 		RecentPicker.Items.Clear();
 		foreach (var entry in _recentEntries)
 			RecentPicker.Items.Add($"{entry.ServerName} → #{entry.ChannelName}");
@@ -237,24 +240,26 @@ public partial class MainPage : ContentPage
 			}
 
 			if (_discord.IsInGuild(info.Value.GuildId))
-			{
-				InviteStatusLabel.Text = $"✅ Déjà dans « {info.Value.GuildName} ».";
-				InviteStatusLabel.TextColor = Colors.LimeGreen;
-				RefreshServerList(info.Value.GuildId);
-				return;
-			}
+				{
+					InviteStatusLabel.Text = $"✅ Déjà dans « {info.Value.GuildName} ».";
+					InviteStatusLabel.TextColor = Colors.LimeGreen;
+					AppSettings.AddKnownServer(info.Value.GuildId);
+					RefreshServerList(info.Value.GuildId);
+					return;
+				}
 
-			string url = _discord.GetBotInviteUrl(info.Value.GuildId);
-			await Launcher.OpenAsync(url);
+				string url = _discord.GetBotInviteUrl(info.Value.GuildId);
+				await Launcher.OpenAsync(url);
 
-			bool confirmed = await DisplayAlert(
-				"Ajout du bot",
-				"Autorisez le bot dans votre navigateur,\npuis appuyez OK pour rafraîchir.",
-				"OK", "Annuler");
+				bool confirmed = await DisplayAlert(
+					"Ajout du bot",
+					"Autorisez le bot dans votre navigateur,\npuis appuyez OK pour rafraîchir.",
+					"OK", "Annuler");
 
-			if (confirmed)
-			{
-				RefreshServerList(info.Value.GuildId);
+				if (confirmed)
+				{
+					AppSettings.AddKnownServer(info.Value.GuildId);
+					RefreshServerList(info.Value.GuildId);
 				InviteStatusLabel.Text = _discord.IsInGuild(info.Value.GuildId)
 					? "✅ Bot ajouté !"
 					: "⚠️ Le bot n'a pas encore rejoint.";
@@ -276,10 +281,7 @@ public partial class MainPage : ContentPage
 
 	private void RefreshServerList(ulong selectGuildId = 0)
 	{
-		_guilds = _discord.GetGuilds();
-		ServerPicker.Items.Clear();
-		foreach (var g in _guilds)
-			ServerPicker.Items.Add(g.Name);
+		PopulateFilteredGuilds();
 
 		if (selectGuildId != 0)
 		{
@@ -292,6 +294,16 @@ public partial class MainPage : ContentPage
 				}
 			}
 		}
+	}
+
+	private void PopulateFilteredGuilds()
+	{
+		var allGuilds = _discord.GetGuilds();
+		var knownIds = new HashSet<ulong>(AppSettings.GetKnownServerIds());
+		_guilds = allGuilds.Where(g => knownIds.Contains(g.Id)).ToList();
+		ServerPicker.Items.Clear();
+		foreach (var g in _guilds)
+			ServerPicker.Items.Add(g.Name);
 	}
 
 	private async void OnStartClicked(object? sender, EventArgs e)
@@ -374,6 +386,13 @@ public partial class MainPage : ContentPage
 	private async void OnZoneConfigClicked(object? sender, EventArgs e)
 	{
 		await Shell.Current.GoToAsync("OverlayZone");
+	}
+
+	private void OnOpacityChanged(object? sender, ValueChangedEventArgs e)
+	{
+		int value = (int)Math.Round(e.NewValue);
+		AppSettings.OverlayBackgroundOpacity = value;
+		OpacityValueLabel.Text = $"{value} %";
 	}
 
 	private static void OpenOverlaySettings()

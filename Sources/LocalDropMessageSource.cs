@@ -11,10 +11,13 @@ namespace DropCast.Sources
     /// Message source that receives local file drops via <see cref="DropOverlayForm"/>.
     /// When a file is dropped, a <see cref="DropCaptionDialog"/> is shown for caption/trim,
     /// then a <see cref="DropCastMessage"/> is fired through the pipeline.
+    /// The file is also uploaded to the currently selected Discord channel so all
+    /// listeners can see it.
     /// </summary>
     public class LocalDropMessageSource : IMessageSource
     {
         private DropOverlayForm _overlay;
+        private readonly DiscordMessageSource _discordSource;
 
         private static readonly Dictionary<string, MediaType> ExtensionToMediaType =
             new Dictionary<string, MediaType>(StringComparer.OrdinalIgnoreCase)
@@ -39,6 +42,11 @@ namespace DropCast.Sources
         public string PlatformName { get { return "Local Drop"; } }
 
         public event EventHandler<DropCastMessage> MessageReceived;
+
+        public LocalDropMessageSource(DiscordMessageSource discordSource)
+        {
+            _discordSource = discordSource;
+        }
 
         public Task ConnectAsync()
         {
@@ -104,6 +112,18 @@ namespace DropCast.Sources
                 };
 
                 MessageReceived?.Invoke(this, msg);
+
+                // Upload to the current Discord channel so all listeners see the meme
+                if (_discordSource != null)
+                {
+                    string uploadPath = filePath;
+                    string uploadCaption = dialog.Caption ?? "";
+                    _ = Task.Run(async () =>
+                    {
+                        try { await _discordSource.UploadFileAsync(uploadPath, uploadCaption); }
+                        catch { /* logged inside UploadFileAsync */ }
+                    });
+                }
             }
         }
     }
